@@ -83,6 +83,7 @@ export const appRouter = router({
       .mutation(({ ctx, input }) =>
         createCustomSource(ctx.user.id, input.appName, input.category)
       ),
+
   }),
   assistant: router({
     threads: protectedProcedure.query(({ ctx }) => listChatThreads(ctx.user.id)),

@@ -190,3 +190,11 @@
 
 - [x] Debug custom sources not appearing - filter was hiding "ready" status sources
 - [x] Fix the visibility issue - Changed filter to show both ready and connected sources
+
+
+## Cleanup - Remove Duplicate Sources (v1.18 - Complete)
+
+- [x] Updated SOURCE_BLUEPRINTS to only seed Dexcom and custom_app
+- [x] Ran cleanup script to delete all unwanted sources from database
+- [x] Verified: Database now contains only Dexcom (458) and custom_app (286) sources
+- [x] All pre-configured sources (Fitbit, Oura, Apple Health, Google Fit, etc.) removed

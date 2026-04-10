@@ -28,33 +28,6 @@ const SOURCE_BLUEPRINTS = [
     description: "Continuous glucose monitoring connector with OAuth-based ingestion.",
   },
   {
-    provider: "oura",
-    category: "sleep",
-    status: "ready",
-    implementationStage: "direct_oauth",
-    authType: "oauth2",
-    displayName: "Oura",
-    description: "Sleep and recovery connector for nightly sessions, readiness, and resting trends.",
-  },
-  {
-    provider: "apple_health",
-    category: "multi",
-    status: "planned",
-    implementationStage: "native_bridge",
-    authType: "native_bridge",
-    displayName: "Apple Health",
-    description: "Native bridge for HealthKit-derived activity, sleep, and nutrition signals.",
-  },
-  {
-    provider: "google_fit",
-    category: "activity",
-    status: "planned",
-    implementationStage: "legacy",
-    authType: "legacy",
-    displayName: "Google Fit",
-    description: "Activity connector (note: Google Fit API is deprecated for new apps).",
-  },
-  {
     provider: "custom_app",
     category: "multi",
     status: "ready",
@@ -113,9 +86,7 @@ export async function ensureSeedDataForUser(userId: number) {
           supportedMetrics:
             source.provider === "dexcom" || source.provider === "custom_app"
               ? ["glucose", "trend"]
-              : source.provider === "oura"
-                ? ["sleep", "recovery"]
-                : ["status"],
+              : ["status"],
         },
       }))
     );

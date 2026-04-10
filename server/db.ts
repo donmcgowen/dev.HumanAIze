@@ -1,6 +1,6 @@
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog } from "../drizzle/schema";
+import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -226,4 +226,25 @@ export async function updateFoodLog(
   const updated = await db.select().from(foodLogs).where(eq(foodLogs.id, foodLogId)).limit(1);
   if (!updated || updated.length === 0) throw new Error("Failed to update food log");
   return updated[0];
+}
+
+
+export async function cleanupUnwantedSources(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  // Delete all pre-configured sources except custom_app
+  // This removes Dexcom (provider), Fitbit, Oura, Apple Health, Google Fit, etc.
+  const providersToDelete = ["dexcom", "fitbit", "oura", "apple_health", "google_fit", "whoop"] as const;
+  
+  for (const provider of providersToDelete) {
+    await db.delete(healthSources).where(
+      and(
+        eq(healthSources.userId, userId),
+        eq(healthSources.provider, provider as any)
+      )
+    );
+  }
 }
