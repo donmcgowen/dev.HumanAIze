@@ -163,3 +163,9 @@
 - [x] Convert and display biometrics in selected units
 - [x] Show live conversion display next to input fields
 - [x] Test unit conversions
+
+
+## Bug Fixes (v1.14 - Complete)
+
+- [x] Fix custom source credential dialog to request username/password instead of access token
+- [x] Remove Fitbit from seeded sources

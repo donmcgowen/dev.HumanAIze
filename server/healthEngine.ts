@@ -28,15 +28,6 @@ const SOURCE_BLUEPRINTS = [
     description: "Continuous glucose monitoring connector with OAuth-based ingestion.",
   },
   {
-    provider: "fitbit",
-    category: "multi",
-    status: "ready",
-    implementationStage: "direct_oauth",
-    authType: "oauth2",
-    displayName: "Fitbit",
-    description: "Activity and sleep connector for steps, workouts, readiness, and sleep metrics.",
-  },
-  {
     provider: "oura",
     category: "sleep",
     status: "ready",
@@ -122,11 +113,9 @@ export async function ensureSeedDataForUser(userId: number) {
           supportedMetrics:
             source.provider === "dexcom" || source.provider === "custom_app"
               ? ["glucose", "trend"]
-              : source.provider === "fitbit"
-                ? ["steps", "workouts", "sleep"]
-                : source.provider === "oura"
-                  ? ["sleep", "recovery"]
-                  : ["status"],
+              : source.provider === "oura"
+                ? ["sleep", "recovery"]
+                : ["status"],
         },
       }))
     );

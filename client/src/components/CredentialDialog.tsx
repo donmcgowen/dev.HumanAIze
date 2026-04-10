@@ -15,6 +15,7 @@ interface CredentialDialogProps {
     displayName: string;
     category: string;
     authType: "oauth" | "api_key" | "partner" | "custom";
+    provider?: string;
   };
   onSubmit: (credentials: Record<string, string>) => Promise<void>;
   isLoading?: boolean;
@@ -200,7 +201,13 @@ export function CredentialDialog({ open, onOpenChange, source, onSubmit, isLoadi
     "Oura": "oura",
     "Custom App": "custom-app",
   };
-  const sourceKey = sourceKeyMap[source.displayName] || source.displayName.toLowerCase().replace(/\s+/g, "-");
+  let sourceKey = sourceKeyMap[source.displayName];
+  if (!sourceKey && source.provider === "custom_app") {
+    sourceKey = "custom-app";
+  }
+  if (!sourceKey) {
+    sourceKey = source.displayName.toLowerCase().replace(/\s+/g, "-");
+  }
   const config = credentialConfigs[sourceKey];
 
   if (!config) {
