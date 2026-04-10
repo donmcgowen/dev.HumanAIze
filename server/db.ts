@@ -1,4 +1,4 @@
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -174,9 +174,10 @@ export async function addFoodLog(userId: number, food: Omit<InsertFoodLog, 'user
     notes: food.notes,
   };
 
-  await db.insert(foodLogs).values(newFood);
+  const result = await db.insert(foodLogs).values(newFood);
   
-  const created = await db.select().from(foodLogs).where(eq(foodLogs.userId, userId)).orderBy((t) => t.createdAt).limit(1);
+  // Get the newly inserted row by ordering by createdAt descending (most recent first)
+  const created = await db.select().from(foodLogs).where(eq(foodLogs.userId, userId)).orderBy((t) => desc(t.createdAt)).limit(1);
   if (!created || created.length === 0) throw new Error("Failed to create food log");
   return created[0];
 }

@@ -18,13 +18,13 @@ export default function Sources() {
   const [selectedSource, setSelectedSource] = useState<any>(null);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
   const [creatingCustom, setCreatingCustom] = useState(false);
-  // Filter out partner-only sources and show only active (connected) sources
+  // Filter out partner-only sources
   const publicSources = allSources?.filter(
     (s) => ![
 "glooko", "myfitnesspal", "cronometer"].includes(s.provider)
   ) || [];
-  // Only show connected/active sources
-  const sources = publicSources.filter((s) => s.status === "connected");
+  // Show both ready (not yet connected) and connected sources
+  const sources = publicSources.filter((s) => s.status === "ready" || s.status === "connected");
 
   const handleAddCustomSource = async () => {
     const appName = prompt("Enter a name for your custom app (e.g., 'My Health API')");

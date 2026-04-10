@@ -177,3 +177,16 @@
 - [x] Configure OAuth redirect URI in Dexcom app
 - [x] Verify background sync can access Dexcom API with developer credentials
 - [x] Document setup process in BACKGROUND_SYNC_GUIDE.md
+
+
+## Bug Report - Food Log Add Failing (v1.16 - Fixed)
+
+- [x] Debug food log add functionality - Zod validation rejected 0 values for macros
+- [x] Fix the issue - Changed .positive() to .min(0) for macro fields
+- [x] Fixed addFoodLog to return newly inserted row instead of oldest
+
+
+## Bug Report - Custom Sources Not Appearing (v1.17 - Fixed)
+
+- [x] Debug custom sources not appearing - filter was hiding "ready" status sources
+- [x] Fix the visibility issue - Changed filter to show both ready and connected sources
