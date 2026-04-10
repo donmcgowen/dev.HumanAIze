@@ -169,3 +169,11 @@
 
 - [x] Fix custom source credential dialog to request username/password instead of access token
 - [x] Remove Fitbit from seeded sources
+
+
+## Dexcom Developer API Setup (v1.15 - Complete)
+
+- [x] Add Dexcom Client ID and Client Secret as environment variables
+- [x] Configure OAuth redirect URI in Dexcom app
+- [x] Verify background sync can access Dexcom API with developer credentials
+- [x] Document setup process in BACKGROUND_SYNC_GUIDE.md
