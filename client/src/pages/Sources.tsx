@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { CredentialDialog } from "@/components/CredentialDialog";
 
 export default function Sources() {
-  const { data: sources, isLoading, refetch } = trpc.sources.list.useQuery();
+  const { data: allSources, isLoading, refetch } = trpc.sources.list.useQuery();
   const connectMutation = trpc.sources.connect.useMutation();
   const disconnectMutation = trpc.sources.disconnect.useMutation();
   const syncMutation = trpc.sources.sync.useMutation();
@@ -16,6 +16,12 @@ export default function Sources() {
   const [syncingAll, setSyncingAll] = useState(false);
   const [selectedSource, setSelectedSource] = useState<any>(null);
   const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
+
+  // Filter out partner-only sources (Glooko, MyFitnessPal, Cronometer) from the UI
+  const publicSources = allSources?.filter(
+    (s) => !["glooko", "myfitnesspal", "cronometer"].includes(s.provider)
+  ) || [];
+  const sources = publicSources;
 
   const handleConnect = async (source: any) => {
     // Open credential dialog for user input
@@ -89,11 +95,20 @@ export default function Sources() {
     );
   }
 
+  // Show message if no public sources are available
+  if (sources.length === 0) {
+    return (
+      <div className="space-y-4 text-center py-12">
+        <p className="text-slate-400">No public health sources available. Check back soon!</p>
+      </div>
+    );
+  }
+
   const groupedByCategory = {
-    glucose: sources?.filter((s) => s.category === "glucose" || s.category === "multi") || [],
-    activity: sources?.filter((s) => s.category === "activity" || s.category === "multi") || [],
-    nutrition: sources?.filter((s) => s.category === "nutrition" || s.category === "multi") || [],
-    sleep: sources?.filter((s) => s.category === "sleep" || s.category === "multi") || [],
+    glucose: sources.filter((s) => s.category === "glucose" || s.category === "multi"),
+    activity: sources.filter((s) => s.category === "activity" || s.category === "multi"),
+    nutrition: sources.filter((s) => s.category === "nutrition" || s.category === "multi"),
+    sleep: sources.filter((s) => s.category === "sleep" || s.category === "multi"),
   };
 
   return (

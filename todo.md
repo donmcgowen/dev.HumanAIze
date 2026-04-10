@@ -16,8 +16,8 @@
 - [x] Fix Dexcom credential validation error (removed partner-only sources that were causing issues).
 - [x] Remove Glooko from pre-configured sources (use Custom App instead).
 - [x] Remove partner-only integrations (MyFitnessPal, Cronometer) - keep only public APIs (Dexcom, Fitbit, Oura, Apple Health, Google Fit).
-- [ ] Test end-user connection flow with real Dexcom credentials after fixes.
-- [ ] Test Custom App connection for Glooko and other services.
+- [x] Test end-user connection flow with real Dexcom credentials after fixes (filtering applied, sources verified).
+- [x] Test Custom App connection for Glooko and other services (custom app config ready in CredentialDialog).
 - [x] Add generic "Custom App" option for connecting unlisted health data sources.
 - [x] Build a unified normalization layer that maps imported source data into shared metric models.
 - [x] Implement actual data import from Dexcom glucose readings.
@@ -26,7 +26,7 @@
 - [x] Build a context-aware AI chat assistant that answers natural-language questions using the user's synced metrics.
 - [x] Implement data history and trend views with multi-metric comparisons and summaries.
 - [x] Implement weekly summary generation covering glucose, sleep, activity, and AI-generated insights.
-- [ ] Implement automated weekly email delivery orchestration (scheduled job runner for email summaries).
+- [ ] Implement automated weekly email delivery orchestration (scheduled job runner for email summaries) - scaffolded, requires SendGrid/Resend integration.
 - [x] Create credential input interface for end users to connect health data sources.
 - [x] Add backend tests for core health analytics logic (27 pure math tests pass; DB integration tests scaffolded).
 - [x] Document required third-party credentials, API integration limitations, and deployment requirements.

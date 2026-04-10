@@ -21,7 +21,7 @@ interface CredentialDialogProps {
 }
 
 const credentialConfigs: Record<string, { fields: Array<{ key: string; label: string; type: string; placeholder: string; required: boolean }> }> = {
-  "dexcom-cgm": {
+  "dexcom": {
     fields: [
       {
         key: "accessToken",
@@ -183,8 +183,6 @@ export function CredentialDialog({ open, onOpenChange, source, onSubmit, isLoadi
     "Fitbit": "fitbit",
     "Google Fit": "google-fit",
     "Apple Health": "apple-health",
-    "MyFitnessPal": "myfitnesspal",
-    "Cronometer": "cronometer",
     "Oura": "oura",
     "Custom App": "custom-app",
   };
