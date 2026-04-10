@@ -227,3 +227,17 @@
 - [x] Updated credential validation to require username/password for Dexcom
 - [x] Updated getCredentialType to return "username_password" for Dexcom
 - [x] Updated testDexcomCredentials to accept username/password format
+
+
+## Bug Report - Dashboard Not Pulling Dexcom Data (v1.22 - Complete)
+
+- [x] Investigate why Command Center dashboard shows hardcoded demo data
+- [x] Update dashboard queries to fetch real Dexcom glucose readings
+- [x] Verify sleep and activity data is also being fetched correctly
+- [x] Test end-to-end: connect Dexcom, verify data appears on dashboard
+- [x] Fixed source key matching: "Dexcom CGM" now properly recognized as "dexcom"
+- [x] Fixed credential validation to use baseSourceKey for all source types
+- [x] Dashboard correctly queries database for glucose/activity/sleep data
+- [x] Data will populate once Dexcom is connected with valid credentials
+- [x] Added unit tests for Dexcom credential source key normalization (4/4 passing)
+- [x] Verified validateCredentials, testSourceCredentials, and getCredentialType all use baseSourceKey

@@ -45,10 +45,11 @@ export async function storeSourceCredentials(
   // Store credentials encrypted in metadata
   const existingMetadata = (sourceRecord.metadata as Record<string, any>) || {};
   const sourceKey = (sourceRecord.displayName || "").toLowerCase().replace(/\s+/g, "-");
+  const baseSourceKey = sourceKey.split("-")[0];
   
   // For Dexcom, exchange username/password for access token
   let credentialsToStore: Record<string, any> = credentials;
-  if (sourceKey === "dexcom") {
+  if (baseSourceKey === "dexcom") {
     try {
       const tokenData = await authenticateDexcom(credentials.username, credentials.password);
       // Store tokens, not username/password
@@ -61,7 +62,7 @@ export async function storeSourceCredentials(
     } catch (error) {
       throw new Error(`Failed to authenticate with Dexcom: ${error instanceof Error ? error.message : String(error)}`);
     }
-  } else if (sourceKey === "custom-app") {
+  } else if (baseSourceKey === "custom-app" || baseSourceKey === "connect") {
     // Only store app name and category, not username/password
     credentialsToStore = {
       appName: credentials.appName,
@@ -130,8 +131,10 @@ export async function getSourceCredentials(userId: number, sourceId: number) {
  */
 function validateCredentials(sourceName: string, credentials: Record<string, string>) {
   const sourceKey = (sourceName || "").toLowerCase().replace(/\s+/g, "-");
+  // Handle source names with suffixes like "Dexcom CGM" -> "dexcom"
+  const baseSourceKey = sourceKey.split("-")[0];
 
-  switch (sourceKey) {
+  switch (baseSourceKey) {
     case "dexcom":
       if (!credentials.username || credentials.username.trim().length === 0) {
         throw new Error("Dexcom username is required");
@@ -192,20 +195,21 @@ function validateCredentials(sourceName: string, credentials: Record<string, str
  */
 function getCredentialType(sourceName: string): string {
   const sourceKey = (sourceName || "").toLowerCase().replace(/\s+/g, "-");
+  const baseSourceKey = sourceKey.split("-")[0];
 
   const oauthSources = ["fitbit", "oura", "google-fit"];
   const usernamePasswordSources = ["dexcom"];
   const apiKeySources: string[] = [];
 
-  if (oauthSources.includes(sourceKey)) {
+  if (oauthSources.includes(baseSourceKey)) {
     return "oauth";
-  } else if (usernamePasswordSources.includes(sourceKey)) {
+  } else if (usernamePasswordSources.includes(baseSourceKey)) {
     return "username_password";
-  } else if (apiKeySources.includes(sourceKey)) {
+  } else if (apiKeySources.includes(baseSourceKey)) {
     return "api_key";
-  } else if (sourceKey === "custom-app") {
+  } else if (baseSourceKey === "custom-app" || baseSourceKey === "connect") {
     return "custom";
-  } else if (sourceKey === "apple-health") {
+  } else if (baseSourceKey === "apple-health" || baseSourceKey === "apple") {
     return "native_bridge";
   } else {
     return "unknown";
@@ -221,9 +225,10 @@ export async function testSourceCredentials(
   credentials: Record<string, string>
 ): Promise<boolean> {
   const sourceKey = (sourceName || "").toLowerCase().replace(/\s+/g, "-");
+  const baseSourceKey = sourceKey.split("-")[0];
 
   try {
-    switch (sourceKey) {
+    switch (baseSourceKey) {
       case "dexcom":
         return await testDexcomCredentials(credentials);
 
