@@ -3,13 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InsightsPanel } from "@/components/InsightsPanel";
-import { Loader2, Activity, TrendingUp, Zap } from "lucide-react";
+import { Loader2, Activity, Zap, Plus, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
+import { useState } from "react";
 
 export function Monitoring() {
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: sources, isLoading: sourcesLoading } = trpc.sources.list.useQuery();
   const [, navigate] = useLocation();
+  const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
   if (isLoading || sourcesLoading || !user) {
     return (
@@ -19,34 +21,35 @@ export function Monitoring() {
     );
   }
 
-  const connectedSources = sources?.filter((s) => s.status === "connected") || [];
-  const readySources = sources?.filter((s) => s.status === "ready") || [];
+  // Filter to show only custom apps
+  const customAppSources = sources?.filter((s) => s.provider === "custom_app") || [];
+  const connectedCustomApps = customAppSources.filter((s) => s.status === "connected");
 
   // Generate insights based on connected sources
   const generateInsights = () => {
     const insights = [];
     
-    if (connectedSources.length === 0) {
+    if (connectedCustomApps.length === 0) {
       insights.push({
         type: "tip" as const,
         title: "Get Started with Health Monitoring",
-        description: "Connect your first health data source to begin tracking glucose, activity, sleep, and more.",
-        action: "Start by connecting Dexcom for continuous glucose monitoring or Fitbit for activity tracking."
+        description: "Connect your first health data source to begin tracking your health metrics.",
+        action: "Click the '+' button to add a custom app connection."
       });
     } else {
       insights.push({
         type: "success" as const,
         title: "Data Sources Connected",
-        description: `You have ${connectedSources.length} active health data source${connectedSources.length !== 1 ? 's' : ''} syncing your metrics.`,
+        description: `You have ${connectedCustomApps.length} active health data source${connectedCustomApps.length !== 1 ? 's' : ''} syncing your metrics.`,
         action: "Keep your sources connected for continuous health insights."
       });
       
-      if (connectedSources.length < 3) {
+      if (connectedCustomApps.length < 3) {
         insights.push({
           type: "tip" as const,
-          title: "Enhance Your Health Profile",
-          description: "Add more data sources for comprehensive health analysis and better personalized recommendations.",
-          action: "Consider connecting sleep (Oura), activity (Fitbit), or nutrition (Custom App) data."
+          title: "Add More Data Sources",
+          description: "Connect additional health apps for comprehensive health analysis and better personalized recommendations.",
+          action: "Click the '+' button to add more custom app connections."
         });
       }
     }
@@ -54,28 +57,8 @@ export function Monitoring() {
     return insights;
   };
 
-  const getSourceIcon = (provider: string) => {
-    const icons: Record<string, React.ReactNode> = {
-      dexcom: <Zap className="w-5 h-5 text-red-400" />,
-      fitbit: <Activity className="w-5 h-5 text-blue-400" />,
-      oura: <TrendingUp className="w-5 h-5 text-cyan-400" />,
-      apple_health: <Activity className="w-5 h-5 text-gray-400" />,
-      google_fit: <Activity className="w-5 h-5 text-green-400" />,
-      custom_app: <Zap className="w-5 h-5 text-yellow-400" />,
-    };
-    return icons[provider] || <Activity className="w-5 h-5" />;
-  };
-
-  const getSourceLabel = (provider: string) => {
-    const labels: Record<string, string> = {
-      dexcom: "Dexcom CGM",
-      fitbit: "Fitbit",
-      oura: "Oura Ring",
-      apple_health: "Apple Health",
-      google_fit: "Google Fit",
-      custom_app: "Custom App",
-    };
-    return labels[provider] || provider;
+  const handleSourceClick = (sourceId: number) => {
+    setExpandedSourceId(expandedSourceId === sourceId.toString() ? null : sourceId.toString());
   };
 
   return (
@@ -83,82 +66,97 @@ export function Monitoring() {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Health Monitoring</h1>
-          <p className="text-slate-400">Connect and manage your health data sources</p>
+          <p className="text-slate-400">Connect and manage your custom health data sources</p>
         </div>
 
-        {/* Connected Sources */}
-        {connectedSources.length > 0 && (
-          <Card className="mb-6 border border-white/10 bg-slate-950">
-            <CardHeader>
-              <CardTitle className="text-white">Connected Sources</CardTitle>
-              <CardDescription>Your active health data connections</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {connectedSources.map((source) => (
-                  <div key={source.id} className="p-4 rounded-lg bg-slate-900 border border-green-500/30">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {getSourceIcon(source.provider)}
+        {/* Connected Sources Dropdown */}
+        <Card className="mb-6 border border-white/10 bg-slate-950">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-white">Connected Sources</CardTitle>
+                <CardDescription>Your active health data connections</CardDescription>
+              </div>
+              <Button
+                onClick={() => navigate("/sources")}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add Source
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {connectedCustomApps.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-slate-400 mb-4">No connected sources yet</p>
+                <Button
+                  onClick={() => navigate("/sources")}
+                  className="bg-cyan-500 hover:bg-cyan-600 text-white font-semibold"
+                >
+                  Connect Your First Source
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {connectedCustomApps.map((source) => (
+                  <div
+                    key={source.id}
+                    className="p-4 rounded-lg bg-slate-900 border border-green-500/30 cursor-pointer hover:bg-slate-800 transition-colors"
+                    onClick={() => handleSourceClick(source.id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1">
+                        <Zap className="w-5 h-5 text-yellow-400" />
                         <div>
-                          <p className="font-semibold text-white">{getSourceLabel(source.provider)}</p>
-                          <p className="text-xs text-slate-400">Connected</p>
+                          <p className="font-semibold text-white">{source.displayName || "Custom App"}</p>
+                          <p className="text-xs text-slate-400">
+                            {source.category || "Custom data"} • Connected
+                          </p>
                         </div>
                       </div>
-                      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>
+                      <div className="flex items-center gap-3">
+                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Active</Badge>
+                        <ChevronDown
+                          className={`w-5 h-5 text-slate-400 transition-transform ${
+                            expandedSourceId === source.id.toString() ? "rotate-180" : ""
+                          }`}
+                        />
+                      </div>
                     </div>
-                    {source.lastSyncAt && (
-                      <p className="text-xs text-slate-400">
-                        Last sync: {new Date(source.lastSyncAt).toLocaleDateString()}
-                      </p>
-                    )}
-                    <div className="flex gap-2 mt-3">
-                      <Button variant="outline" size="sm" className="flex-1 border-white/10 text-slate-300 hover:text-white">
-                        Sync Now
-                      </Button>
-                      <Button variant="outline" size="sm" className="flex-1 border-white/10 text-red-400 hover:text-red-300">
-                        Disconnect
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Available Sources */}
-        {readySources.length > 0 && (
-          <Card className="mb-6 border border-white/10 bg-slate-950">
-            <CardHeader>
-              <CardTitle className="text-white">Available Sources</CardTitle>
-              <CardDescription>Connect additional health data sources</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {readySources.map((source) => (
-                  <div key={source.id} className="p-4 rounded-lg bg-slate-900 border border-white/10">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {getSourceIcon(source.provider)}
-                        <div>
-                          <p className="font-semibold text-white">{getSourceLabel(source.provider)}</p>
-                          <p className="text-xs text-slate-400">Not connected</p>
+                    {/* Expanded Details */}
+                    {expandedSourceId === source.id.toString() && (
+                      <div className="mt-4 pt-4 border-t border-slate-700 space-y-3">
+                        {source.lastSyncAt && (
+                          <p className="text-sm text-slate-400">
+                            Last sync: {new Date(source.lastSyncAt).toLocaleDateString()}
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 border-white/10 text-slate-300 hover:text-white"
+                          >
+                            Sync Now
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 border-white/10 text-red-400 hover:text-red-300"
+                          >
+                            Disconnect
+                          </Button>
                         </div>
                       </div>
-                    </div>
-                    <Button
-                      onClick={() => navigate("/sources")}
-                      className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold"
-                    >
-                      Connect
-                    </Button>
+                    )}
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            )}
+          </CardContent>
+        </Card>
 
         {/* Insights Section */}
         <InsightsPanel insights={generateInsights()} />
@@ -174,22 +172,22 @@ export function Monitoring() {
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Average Glucose</p>
                 <p className="text-2xl font-bold text-red-400">-- mg/dL</p>
-                <p className="text-xs text-slate-500 mt-1">Connect Dexcom to view</p>
+                <p className="text-xs text-slate-500 mt-1">Connect a glucose source to view</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
-                <p className="text-slate-400 text-sm mb-2">Daily Steps</p>
+                <p className="text-slate-400 text-sm mb-2">Daily Activity</p>
                 <p className="text-2xl font-bold text-blue-400">-- steps</p>
-                <p className="text-xs text-slate-500 mt-1">Connect Fitbit or Apple Health</p>
+                <p className="text-xs text-slate-500 mt-1">Connect an activity source to view</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Average Sleep</p>
                 <p className="text-2xl font-bold text-purple-400">-- hours</p>
-                <p className="text-xs text-slate-500 mt-1">Connect Oura or Apple Health</p>
+                <p className="text-xs text-slate-500 mt-1">Connect a sleep source to view</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Heart Rate</p>
                 <p className="text-2xl font-bold text-orange-400">-- bpm</p>
-                <p className="text-xs text-slate-500 mt-1">Connect Fitbit or Oura</p>
+                <p className="text-xs text-slate-500 mt-1">Connect a heart rate source to view</p>
               </div>
             </div>
           </CardContent>

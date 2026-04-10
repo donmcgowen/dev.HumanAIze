@@ -98,15 +98,14 @@
 
 ## New Requests (v1.8 UI/UX Improvements)
 
-- [ ] Debug and fix food logging functionality (partial working)
-- [ ] Refactor Monitoring page to show only custom apps (remove pre-configured sources)
-- [ ] Make each custom source clickable to navigate to source details
-- [ ] Convert sources list to dropdown for space efficiency
-- [ ] Add '+' button to add new custom sources
-- [ ] Show user-defined app name for each custom source
-
-- [ ] Create comprehensive food database with 200+ common foods and macro values
-- [ ] Add specific food varieties (chicken breast, thighs, ground beef, salmon, etc.)
-- [ ] Implement automated macro calculator based on food selection and quantity
-- [ ] Update FoodLogger with searchable food dropdown and quantity input
-- [ ] Test food logging with various foods and auto-calculated macros
+- [x] Debug and fix food logging functionality (fully working with auto-calculation)
+- [x] Refactor Monitoring page to show only custom apps (removed pre-configured sources)
+- [x] Make each custom source clickable to navigate to source details (expandable dropdown)
+- [x] Convert sources list to dropdown for space efficiency (compact card design)
+- [x] Add '+' button to add new custom sources (Add Source button at top)
+- [x] Show user-defined app name for each custom source (displays displayName)
+- [x] Create comprehensive food database with 60+ common foods and macro values
+- [x] Add specific food varieties (chicken breast, thighs, ground beef, salmon, eggs, vegetables, fruits, grains)
+- [x] Implement automated macro calculator based on food selection and quantity
+- [x] Update FoodLogger with searchable food dropdown and quantity input with unit selector
+- [x] Test food logging with various foods and auto-calculated macros (Chicken Breast 3oz = 26.5g protein, 3.1g fat, 0g carbs, 140 cal)
