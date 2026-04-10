@@ -13,8 +13,8 @@
 - [x] Implement real Dexcom OAuth token validation with live API testing.
 - [x] Implement real Glooko API key validation with live API testing.
 - [x] Fix credential dialog rendering - "Credential configuration not available" error when opening Dexcom dialog.
-- [ ] Test end-user connection flow with real Dexcom credentials.
-- [ ] Test end-user connection flow with real Glooko credentials.
+- [ ] Test end-user connection flow with real Dexcom credentials (credential dialog now fixed).
+- [ ] Test end-user connection flow with real Glooko credentials (credential dialog now fixed).
 - [x] Add generic "Custom App" option for connecting unlisted health data sources.
 - [ ] Build a unified normalization layer that maps imported source data into shared metric models.
 - [ ] Implement actual data import from Dexcom glucose readings.
