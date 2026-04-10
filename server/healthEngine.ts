@@ -33,7 +33,7 @@ const SOURCE_BLUEPRINTS = [
     status: "ready",
     implementationStage: "custom",
     authType: "custom",
-    displayName: "Custom App",
+    displayName: "Connect App",
     description: "Connect any health data source with custom credentials (API keys, OAuth tokens, etc.).",
   },
 ] as const;
@@ -744,4 +744,100 @@ export async function createCustomSource(userId: number, appName: string, catego
   // Return the created source
   const sources = await db.select().from(healthSources).where(eq(healthSources.userId, userId)).orderBy(desc(healthSources.createdAt)).limit(1);
   return sources[0] || null;
+}
+
+
+/**
+ * Clean up duplicate custom_app sources, keeping only the first one per user.
+ * This is a one-time maintenance function.
+ */
+export async function cleanupDuplicateCustomSources() {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available.");
+  }
+
+  try {
+    // Get all custom_app sources grouped by user
+    const allCustomSources = await db
+      .select()
+      .from(healthSources)
+      .where(eq(healthSources.provider, "custom_app"));
+
+    // Group by userId
+    const byUser = new Map<number, typeof allCustomSources>();
+    for (const source of allCustomSources) {
+      if (!byUser.has(source.userId)) {
+        byUser.set(source.userId, []);
+      }
+      byUser.get(source.userId)!.push(source);
+    }
+
+    let totalDeleted = 0;
+    const deletedSources: Array<{ userId: number; id: number; displayName: string }> = [];
+
+    // For each user, delete duplicates
+    for (const [userId, sources] of Array.from(byUser.entries())) {
+      if (sources.length > 1) {
+        // Sort by creation date, keep first
+        sources.sort((a: any, b: any) => a.createdAt.getTime() - b.createdAt.getTime());
+        const toKeep = sources[0];
+        const toDelete = sources.slice(1);
+
+        console.log(`[Cleanup] User ${userId}: Keeping source ${toKeep.id} ("${toKeep.displayName}"), deleting ${toDelete.length} duplicate(s)`);
+
+        for (const source of toDelete) {
+          await db.delete(healthSources).where(eq(healthSources.id, source.id));
+          console.log(`[Cleanup] Deleted source ${source.id} ("${source.displayName}")`);
+          deletedSources.push({ userId, id: source.id, displayName: source.displayName });
+          totalDeleted++;
+        }
+      }
+    }
+
+    console.log(`[Cleanup] Total sources deleted: ${totalDeleted}`);
+    return { success: true, totalDeleted, deletedSources };
+  } catch (error) {
+    console.error("[Cleanup] Error:", error);
+    throw error;
+  }
+}
+
+
+/**
+ * Migrate existing "Custom App" sources to "Connect App"
+ * This updates all custom_app sources with displayName "Custom App" to "Connect App"
+ */
+export async function migrateCustomAppToConnectApp() {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available.");
+  }
+
+  try {
+    // Get all custom_app sources with displayName "Custom App"
+    const sourcesToUpdate = await db
+      .select()
+      .from(healthSources)
+      .where(
+        and(
+          eq(healthSources.provider, "custom_app"),
+          eq(healthSources.displayName, "Custom App")
+        )
+      );
+
+    // Update each one
+    for (const source of sourcesToUpdate) {
+      await db
+        .update(healthSources)
+        .set({ displayName: "Connect App" })
+        .where(eq(healthSources.id, source.id));
+    }
+
+    console.log(`[Migration] Updated custom_app sources: ${sourcesToUpdate.length} rows updated`);
+    return { success: true, rowsUpdated: sourcesToUpdate.length };
+  } catch (error) {
+    console.error("[Migration] Error:", error);
+    throw error;
+  }
 }

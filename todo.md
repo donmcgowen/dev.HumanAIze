@@ -198,3 +198,21 @@
 - [x] Ran cleanup script to delete all unwanted sources from database
 - [x] Verified: Database now contains only Dexcom (458) and custom_app (286) sources
 - [x] All pre-configured sources (Fitbit, Oura, Apple Health, Google Fit, etc.) removed
+
+
+## Bug Report - Duplicate Custom Sources (v1.19 - Complete)
+
+- [x] Delete duplicate custom_app sources created during UI testing
+- [x] Keep only one "Custom App" source per user (the seeded one)
+- [x] Verify Sources page shows clean list with no duplicates
+- [x] Added admin.cleanupDuplicateSources endpoint for future maintenance
+- [x] Confirmed cleanup: 0 duplicates found, database is clean
+
+
+## UI Improvements (v1.20 - Complete)
+
+- [x] Rename "Custom App" to "Connect App" in all sections of Sources page
+- [x] Update SOURCE_BLUEPRINTS displayName from "Custom App" to "Connect App"
+- [x] Verify renamed sources display correctly in browser
+- [x] Added migrateCustomAppToConnectApp endpoint for existing data
+- [x] Ran migration: 282 rows updated from "Custom App" to "Connect App"

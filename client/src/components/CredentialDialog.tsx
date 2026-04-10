@@ -199,7 +199,7 @@ export function CredentialDialog({ open, onOpenChange, source, onSubmit, isLoadi
     "Google Fit": "google-fit",
     "Apple Health": "apple-health",
     "Oura": "oura",
-    "Custom App": "custom-app",
+    "Connect App": "custom-app",
   };
   let sourceKey = sourceKeyMap[source.displayName];
   if (!sourceKey && source.provider === "custom_app") {
@@ -354,7 +354,7 @@ export function CredentialDialog({ open, onOpenChange, source, onSubmit, isLoadi
                 <li>4. Copy the access token</li>
               </>
             )}
-            {source.displayName === "Custom App" && (
+            {source.displayName === "Connect App" && (
               <>
                 <li>1. Visit your app's developer portal</li>
                 <li>2. Create an API application or get your API key</li>

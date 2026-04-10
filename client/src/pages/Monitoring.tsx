@@ -109,7 +109,7 @@ export function Monitoring() {
                       <div className="flex items-center gap-3 flex-1">
                         <Zap className="w-5 h-5 text-yellow-400" />
                         <div>
-                          <p className="font-semibold text-white">{source.displayName || "Custom App"}</p>
+                          <p className="font-semibold text-white">{source.displayName || "Connect App"}</p>
                           <p className="text-xs text-slate-400">
                             {source.category || "Custom data"} • Connected
                           </p>

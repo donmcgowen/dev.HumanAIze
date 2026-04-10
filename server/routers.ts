@@ -17,6 +17,8 @@ import {
   refreshWeeklySummary,
   sendChatMessage,
   triggerSourceSync,
+  cleanupDuplicateCustomSources,
+  migrateCustomAppToConnectApp,
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
@@ -171,6 +173,22 @@ export const appRouter = router({
   }),
   sync: router({
     status: protectedProcedure.query(() => getSyncStatus()),
+  }),
+  admin: router({
+    cleanupDuplicateSources: protectedProcedure.mutation(async ({ ctx }) => {
+      // Only allow owner to run cleanup
+      if (ctx.user.id !== 1) {
+        throw new Error("Unauthorized");
+      }
+      return cleanupDuplicateCustomSources();
+    }),
+    migrateCustomAppToConnectApp: protectedProcedure.mutation(async ({ ctx }) => {
+      // Only allow owner to run migration
+      if (ctx.user.id !== 1) {
+        throw new Error("Unauthorized");
+      }
+      return migrateCustomAppToConnectApp();
+    }),
   }),
 });
 
