@@ -1,0 +1,294 @@
+import { useState, useEffect } from "react";
+import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { InsightsPanel } from "@/components/InsightsPanel";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+
+export function Profile() {
+  const { data: profile, isLoading: isLoadingProfile, refetch } = trpc.profile.get.useQuery();
+  const updateProfile = trpc.profile.upsert.useMutation();
+
+  const [formData, setFormData] = useState({
+    heightCm: "",
+    weightKg: "",
+    ageYears: "",
+    fitnessGoal: "",
+  });
+
+  const [bmi, setBmi] = useState<number | null>(null);
+  const [bmiCategory, setBmiCategory] = useState<string>("");
+
+  // Load profile data into form
+  useEffect(() => {
+    if (profile) {
+      setFormData({
+        heightCm: profile.heightCm?.toString() || "",
+        weightKg: profile.weightKg?.toString() || "",
+        ageYears: profile.ageYears?.toString() || "",
+        fitnessGoal: profile.fitnessGoal || "",
+      });
+    }
+  }, [profile]);
+
+  // Calculate BMI whenever height or weight changes
+  useEffect(() => {
+    const height = parseFloat(formData.heightCm);
+    const weight = parseFloat(formData.weightKg);
+
+    if (height > 0 && weight > 0) {
+      const heightM = height / 100;
+      const calculatedBmi = weight / (heightM * heightM);
+      setBmi(Math.round(calculatedBmi * 10) / 10);
+
+      // Determine BMI category
+      if (calculatedBmi < 18.5) {
+        setBmiCategory("Underweight");
+      } else if (calculatedBmi < 25) {
+        setBmiCategory("Normal weight");
+      } else if (calculatedBmi < 30) {
+        setBmiCategory("Overweight");
+      } else {
+        setBmiCategory("Obese");
+      }
+    } else {
+      setBmi(null);
+      setBmiCategory("");
+    }
+  }, [formData.heightCm, formData.weightKg]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleGoalChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      fitnessGoal: value,
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      await updateProfile.mutateAsync({
+        heightCm: formData.heightCm ? parseFloat(formData.heightCm) : undefined,
+        weightKg: formData.weightKg ? parseFloat(formData.weightKg) : undefined,
+        ageYears: formData.ageYears ? parseInt(formData.ageYears) : undefined,
+        fitnessGoal: (formData.fitnessGoal as "lose_fat" | "build_muscle" | "maintain") || undefined,
+      });
+
+      toast.success("Profile updated successfully");
+      refetch();
+    } catch (error) {
+      toast.error("Failed to update profile");
+      console.error(error);
+    }
+  };
+
+  const getBmiColor = () => {
+    if (!bmiCategory) return "text-gray-400";
+    if (bmiCategory === "Underweight") return "text-blue-400";
+    if (bmiCategory === "Normal weight") return "text-green-400";
+    if (bmiCategory === "Overweight") return "text-yellow-400";
+    return "text-red-400";
+  };
+
+  const getGoalLabel = (goal: string) => {
+    const labels: Record<string, string> = {
+      lose_fat: "Lose Fat",
+      build_muscle: "Build Muscle",
+      maintain: "Maintain",
+    };
+    return labels[goal] || goal;
+  };
+
+  if (isLoadingProfile) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-white mb-2">User Profile</h1>
+          <p className="text-slate-400">Manage your biometric data and fitness goals</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Biometric Data Card */}
+          <Card className="border border-white/10 bg-slate-950">
+            <CardHeader>
+              <CardTitle className="text-white">Biometric Data</CardTitle>
+              <CardDescription>Enter your height, weight, and age for BMI calculation</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="heightCm" className="text-slate-300">
+                    Height (cm)
+                  </Label>
+                  <Input
+                    id="heightCm"
+                    name="heightCm"
+                    type="number"
+                    placeholder="170"
+                    value={formData.heightCm}
+                    onChange={handleInputChange}
+                    className="mt-2 bg-slate-900 border-white/10 text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="weightKg" className="text-slate-300">
+                    Weight (kg)
+                  </Label>
+                  <Input
+                    id="weightKg"
+                    name="weightKg"
+                    type="number"
+                    placeholder="70"
+                    value={formData.weightKg}
+                    onChange={handleInputChange}
+                    className="mt-2 bg-slate-900 border-white/10 text-white placeholder-slate-500"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ageYears" className="text-slate-300">
+                    Age (years)
+                  </Label>
+                  <Input
+                    id="ageYears"
+                    name="ageYears"
+                    type="number"
+                    placeholder="30"
+                    value={formData.ageYears}
+                    onChange={handleInputChange}
+                    className="mt-2 bg-slate-900 border-white/10 text-white placeholder-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* BMI Display */}
+              {bmi !== null && (
+                <div className="mt-6 p-4 rounded-lg bg-slate-900 border border-white/10">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-slate-400 text-sm">Your BMI</p>
+                      <p className={`text-3xl font-bold ${getBmiColor()}`}>{bmi}</p>
+                      <p className={`text-sm mt-1 ${getBmiColor()}`}>{bmiCategory}</p>
+                    </div>
+                    <div className="text-right text-slate-400 text-xs">
+                      <p>BMI Categories:</p>
+                      <p className="text-blue-400">Underweight: &lt;18.5</p>
+                      <p className="text-green-400">Normal: 18.5-24.9</p>
+                      <p className="text-yellow-400">Overweight: 25-29.9</p>
+                      <p className="text-red-400">Obese: ≥30</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Fitness Goal Card */}
+          <Card className="border border-white/10 bg-slate-950">
+            <CardHeader>
+              <CardTitle className="text-white">Fitness Goal</CardTitle>
+              <CardDescription>Select your primary fitness objective</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Select value={formData.fitnessGoal} onValueChange={handleGoalChange}>
+                <SelectTrigger className="bg-slate-900 border-white/10 text-white">
+                  <SelectValue placeholder="Select your fitness goal" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-900 border-white/10">
+                  <SelectItem value="lose_fat">
+                    <span className="text-white">Lose Fat</span>
+                  </SelectItem>
+                  <SelectItem value="build_muscle">
+                    <span className="text-white">Build Muscle</span>
+                  </SelectItem>
+                  <SelectItem value="maintain">
+                    <span className="text-white">Maintain</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              {formData.fitnessGoal && (
+                <div className="mt-4 p-3 rounded-lg bg-slate-900 border border-white/10">
+                  <p className="text-slate-300 text-sm">
+                    <span className="font-semibold">Goal:</span> {getGoalLabel(formData.fitnessGoal)}
+                  </p>
+                  {formData.fitnessGoal === "lose_fat" && (
+                    <p className="text-slate-400 text-xs mt-2">
+                      Focus on caloric deficit, regular cardio, and strength training to preserve muscle mass.
+                    </p>
+                  )}
+                  {formData.fitnessGoal === "build_muscle" && (
+                    <p className="text-slate-400 text-xs mt-2">
+                      Prioritize strength training, adequate protein intake, and caloric surplus for muscle growth.
+                    </p>
+                  )}
+                  {formData.fitnessGoal === "maintain" && (
+                    <p className="text-slate-400 text-xs mt-2">
+                      Balance your nutrition and exercise to maintain current fitness levels.
+                    </p>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Insights Section */}
+          <InsightsPanel 
+            insights={[
+              {
+                type: "tip" as const,
+                title: "Complete Your Profile",
+                description: "Your biometric data helps us provide personalized health recommendations and track your progress.",
+                action: "Save your profile to get started with personalized insights."
+              },
+              {
+                type: "success" as const,
+                title: "Track Your Progress",
+                description: "Monitor your BMI changes and fitness goal progress over time.",
+                action: "Connect health data sources to see how your metrics align with your goals."
+              }
+            ]}
+          />
+
+          {/* Submit Button */}
+          <div className="flex gap-4">
+            <Button
+              type="submit"
+              disabled={updateProfile.isPending}
+              className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold"
+            >
+              {updateProfile.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Profile"
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

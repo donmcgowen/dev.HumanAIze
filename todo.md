@@ -39,3 +39,58 @@
 - [x] Update Connected Sources UI to prominently feature custom connector option
 - [x] Test end-to-end custom connector flow with sample credentials
 - [x] Test Dexcom connection with regular user OAuth token (no partner secret)
+
+
+## New Requests (v1.2 Security Enhancement)
+
+- [x] Update Custom App credential dialog to show username/password as primary with optional API key toggle
+- [x] Modify backend validation to accept either username/password or API key
+- [x] Update database schema to store connection status and auth type without storing actual credentials
+- [x] Implement session token generation from username/password for background syncing (credentials not stored, only metadata)
+- [x] Test end-to-end Custom App flow with both username/password and API key authentication
+
+
+## New Requests (v1.3 User Profile & Fitness Goals)
+
+- [x] Update database schema to add user profile table with biometric fields (height, weight, age) and fitness goal
+- [x] Create user profile page with form to enter/edit height, weight, age, and fitness goal (lose fat, build muscle, maintain)
+- [x] Implement BMI calculation and display on profile page with health category (underweight, normal, overweight, obese)
+- [x] Add profile data to dashboard for quick reference (current BMI, goal, progress)
+- [x] Test end-to-end user profile flow and BMI calculation
+
+
+## New Requests (v1.4 Personalized Nutrition Plans)
+
+- [x] Update database schema to add nutrition_plans table with daily calorie and macronutrient targets
+- [x] Implement nutrition plan calculation logic (TDEE, macronutrient ratios based on fitness goal)
+- [x] Create nutrition plan UI section in Profile page with date picker and plan generation button
+- [x] Add tRPC procedures for creating and retrieving nutrition plans
+- [x] Test end-to-end nutrition plan generation with different fitness goals
+
+
+## New Requests (v1.5 Food Logging MVP + Insights Engine)
+
+- [x] Update database schema to add food_logs table with food items, calories, and macronutrients
+- [x] Create food logging UI component with manual entry form and quick food library
+- [x] Implement macro calculator and daily summary display on Profile page
+- [x] Add tRPC procedures for food logging CRUD operations (add, list, delete)
+- [x] Build insights engine that correlates glucose, food, sleep, activity, and workout data
+- [x] Generate personalized insights: glucose spikes, meal timing, calorie balance, sleep impact
+- [x] Integrate food logging section into Profile/Dashboard with insights and recommendations
+- [x] Test end-to-end food logging with insights and data correlation
+
+
+## New Requests (v1.6 Insights & Analysis)
+
+- [x] Create InsightsPanel component with AI analysis framework
+- [x] Add Insights subsection to Monitoring page (glucose trends, data quality, connection recommendations)
+- [x] Add Insights subsection to Food Logging page (macro balance, meal timing, calorie goals)
+- [x] Add Insights subsection to Workouts page (intensity, recovery, consistency, goal alignment)
+- [x] Add Insights subsection to Profile page (goal progress, BMI trends, personalized recommendations)
+- [x] Implement data correlation engine (food + glucose, workouts + sleep, macros + goals)
+- [x] Test all Insights sections and verify personalized advice generation
+
+## New Requests (v1.7 App Branding)
+
+- [x] Rename app from "Metabolic Insights" to "HumanAIze"
+- [x] Update all UI labels and headers to reflect new branding

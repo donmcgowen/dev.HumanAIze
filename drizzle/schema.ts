@@ -181,6 +181,50 @@ export const insightPreferences = mysqlTable("insight_preferences", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const userProfiles = mysqlTable("user_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id).unique(),
+  heightCm: double("heightCm"),
+  weightKg: double("weightKg"),
+  ageYears: int("ageYears"),
+  fitnessGoal: mysqlEnum("fitnessGoal", ["lose_fat", "build_muscle", "maintain"]),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const nutritionPlans = mysqlTable("nutrition_plans", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  startDate: bigint("startDate", { mode: "number" }).notNull(),
+  endDate: bigint("endDate", { mode: "number" }).notNull(),
+  dailyCalories: int("dailyCalories").notNull(),
+  proteinGrams: double("proteinGrams").notNull(),
+  carbsGrams: double("carbsGrams").notNull(),
+  fatGrams: double("fatGrams").notNull(),
+  proteinCalories: int("proteinCalories").notNull(),
+  carbsCalories: int("carbsCalories").notNull(),
+  fatCalories: int("fatCalories").notNull(),
+  fitnessGoal: mysqlEnum("fitnessGoal", ["lose_fat", "build_muscle", "maintain"]).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const foodLogs = mysqlTable("food_logs", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  foodName: varchar("foodName", { length: 191 }).notNull(),
+  servingSize: varchar("servingSize", { length: 120 }),
+  calories: int("calories").notNull(),
+  proteinGrams: double("proteinGrams").notNull(),
+  carbsGrams: double("carbsGrams").notNull(),
+  fatGrams: double("fatGrams").notNull(),
+  loggedAt: bigint("loggedAt", { mode: "number" }).notNull(),
+  mealType: mysqlEnum("mealType", ["breakfast", "lunch", "dinner", "snack", "other"]).default("other").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type HealthSource = typeof healthSources.$inferSelect;
@@ -193,3 +237,9 @@ export type AiInsight = typeof aiInsights.$inferSelect;
 export type ChatThread = typeof chatThreads.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type WeeklySummary = typeof weeklySummaries.$inferSelect;
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = typeof userProfiles.$inferInsert;
+export type NutritionPlan = typeof nutritionPlans.$inferSelect;
+export type InsertNutritionPlan = typeof nutritionPlans.$inferInsert;
+export type FoodLog = typeof foodLogs.$inferSelect;
+export type InsertFoodLog = typeof foodLogs.$inferInsert;

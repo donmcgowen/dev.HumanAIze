@@ -19,6 +19,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, deleteFoodLog } from "./db";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
@@ -91,6 +92,51 @@ export const appRouter = router({
   summaries: router({
     list: protectedProcedure.query(({ ctx }) => getSummaries(ctx.user.id)),
     regenerate: protectedProcedure.mutation(({ ctx }) => refreshWeeklySummary(ctx.user.id)),
+  }),
+  profile: router({
+    get: protectedProcedure.query(({ ctx }) => getUserProfile(ctx.user.id)),
+    upsert: protectedProcedure
+      .input(
+        z.object({
+          heightCm: z.number().positive().optional(),
+          weightKg: z.number().positive().optional(),
+          ageYears: z.number().int().min(1).max(150).optional(),
+          fitnessGoal: z.enum(["lose_fat", "build_muscle", "maintain"]).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => upsertUserProfile(ctx.user.id, input)),
+  }),
+  food: router({
+    addLog: protectedProcedure
+      .input(
+        z.object({
+          foodName: z.string().min(1),
+          servingSize: z.string().optional(),
+          calories: z.number().int().positive(),
+          proteinGrams: z.number().positive(),
+          carbsGrams: z.number().positive(),
+          fatGrams: z.number().positive(),
+          loggedAt: z.number(),
+          mealType: z.enum(["breakfast", "lunch", "dinner", "snack", "other"]).default("other"),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => addFoodLog(ctx.user.id, input)),
+    getDayLogs: protectedProcedure
+      .input(
+        z.object({
+          startOfDay: z.number(),
+          endOfDay: z.number(),
+        })
+      )
+      .query(({ ctx, input }) => getFoodLogsForDay(ctx.user.id, input.startOfDay, input.endOfDay)),
+    deleteLog: protectedProcedure
+      .input(
+        z.object({
+          foodLogId: z.number().int().positive(),
+        })
+      )
+      .mutation(({ ctx, input }) => deleteFoodLog(input.foodLogId, ctx.user.id)),
   }),
 });
 

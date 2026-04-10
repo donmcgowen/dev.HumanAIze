@@ -5,6 +5,7 @@ import { getDb } from "./db";
 /**
  * Store user-provided credentials for a health source.
  * Credentials are validated against the provider's API before being stored.
+ * For custom-app with username/password, only metadata is stored (not the credentials).
  */
 export async function storeSourceCredentials(
   userId: number,
@@ -35,17 +36,34 @@ export async function storeSourceCredentials(
   const isValid = await testSourceCredentials(sourceRecord.displayName, credentials);
   if (!isValid) {
     throw new Error(
-      `Invalid credentials for ${sourceRecord.displayName}. Please verify your token/key and try again.`
+      `Invalid credentials for ${sourceRecord.displayName}. Please verify your credentials and try again.`
     );
   }
   console.log(`✓ Credentials validated for ${sourceRecord.displayName}`);
 
   // Store credentials encrypted in metadata
   const existingMetadata = (sourceRecord.metadata as Record<string, any>) || {};
+  const sourceKey = (sourceRecord.displayName || "").toLowerCase().replace(/\s+/g, "-");
+  
+  // For custom-app, only store non-sensitive metadata
+  let credentialsToStore: Record<string, any> = credentials;
+  if (sourceKey === "custom-app") {
+    // Only store app name and category, not username/password
+    credentialsToStore = {
+      appName: credentials.appName,
+      category: credentials.category,
+      apiEndpoint: credentials.apiEndpoint,
+      notes: credentials.notes,
+      // Store that credentials were provided, but not the actual values
+      credentialsProvided: true,
+      authType: credentials.apiKey ? "api_key" : "username_password",
+    };
+  }
+  
   const metadata = {
     ...existingMetadata,
     credentials: {
-      ...credentials,
+      ...credentialsToStore,
       storedAt: new Date().toISOString(),
       validatedAt: new Date().toISOString(),
     },
@@ -131,9 +149,12 @@ function validateCredentials(sourceName: string, credentials: Record<string, str
       break;
 
     case "custom-app":
-      // Custom app can accept any credentials format
-      if (!credentials.credentials || credentials.credentials.trim().length === 0) {
-        throw new Error("Credentials are required for custom app");
+      // Custom app requires username and password (API key is optional)
+      if (!credentials.username || credentials.username.trim().length === 0) {
+        throw new Error("Username is required for custom app");
+      }
+      if (!credentials.password || credentials.password.trim().length === 0) {
+        throw new Error("Password is required for custom app");
       }
       break;
 
@@ -191,9 +212,15 @@ export async function testSourceCredentials(
       case "oura":
         return await testOuraCredentials(credentials);
       case "custom-app":
-        // Custom app credentials are accepted as-is (user is responsible for validity)
-        console.log(`Custom app credentials stored: ${credentials.appName || "Unknown"}`);
-        return true;
+        // Custom app: validate username/password or API key
+        if (credentials.apiKey && credentials.apiKey.trim().length > 0) {
+          console.log(`Custom app with API key: ${credentials.appName || "Unknown"}`);
+          return true; // Accept API key as-is
+        } else if (credentials.username && credentials.password) {
+          console.log(`Custom app with username/password: ${credentials.appName || "Unknown"}`);
+          return true; // Accept username/password (user is responsible for validity)
+        }
+        return false;
       case "apple-health":
         // Native bridge, no API test needed
         return true;

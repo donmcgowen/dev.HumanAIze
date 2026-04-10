@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Activity, Bot, Cable, LayoutDashboard, LineChart, LogOut, Mail } from "lucide-react";
+import { Activity, Bot, Cable, LayoutDashboard, LineChart, LogOut, Mail, User, Apple, Dumbbell } from "lucide-react";
 import type { ReactNode } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -28,7 +28,10 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 const menuItems = [
   { icon: LayoutDashboard, label: "Command Center", path: "/dashboard" },
   { icon: LineChart, label: "History", path: "/history" },
-  { icon: Cable, label: "Connected Sources", path: "/sources" },
+  { icon: Cable, label: "Monitoring", path: "/monitoring" },
+  { icon: Apple, label: "Food Logging", path: "/food-logging" },
+  { icon: Dumbbell, label: "Workouts", path: "/workouts" },
+  { icon: User, label: "Profile", path: "/profile" },
   { icon: Bot, label: "Assistant", path: "/assistant" },
   { icon: Mail, label: "Weekly Summaries", path: "/summaries" },
 ];
@@ -86,8 +89,8 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
           <button className="flex w-full items-start gap-3 text-left" onClick={() => setLocation("/dashboard")}>
             <div className="mt-1 h-3 w-3 rounded-none border border-cyan-300 bg-cyan-200/30" />
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-cyan-200/70">Metabolic Insights</p>
-              <h2 className="mt-2 text-base font-black uppercase tracking-[0.12em] text-white">Health intelligence platform</h2>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-cyan-200/70">HumanAIze</p>
+              <h2 className="mt-2 text-base font-black uppercase tracking-[0.12em] text-white">Personalized health AI</h2>
             </div>
           </button>
         </SidebarHeader>
