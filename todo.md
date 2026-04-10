@@ -118,11 +118,13 @@
 - [ ] Test Monitoring page displays only user-created custom apps
 
 
-## Critical Bugs - Food Logging (v1.9 Hotfix)
+## Critical Bugs - Food Logging (v1.9 Hotfix - In Progress)
 
-- [ ] Fix food log entry persistence - entries not saving to database
-- [ ] Fix daily macro calculation - summary shows 0.0g for protein/carbs/fat
-- [ ] Add edit functionality for food entries - users should be able to edit quantity/unit
+- [x] Fix daily macro calculation - now correctly using proteinGrams/carbsGrams/fatGrams from database
+- [x] Add edit UI for food entries - users can click edit icon to modify macros
+- [ ] Verify food log persistence end-to-end (add -> save -> reload -> verify)
+- [ ] Test food log update mutation works correctly
+- [ ] Add backend tests for food log add/update/delete operations
 
 ## Authentication & Onboarding (v1.11 - Complete)
 
