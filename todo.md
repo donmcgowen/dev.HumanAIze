@@ -257,3 +257,22 @@
 - [x] Verified validateCredentials, testSourceCredentials, and getCredentialType all use baseSourceKey
 - [x] Removed orphaned demo data generation code from healthEngine.ts
 - [x] Dashboard now displays REAL data: 100% time in range, 7.1h sleep, 8,220 steps, glucose trend chart
+
+## Bug Report - Data Source Mismatch (v1.24 - RESOLVED)
+
+- [x] Investigate why Command Center shows Dexcom connected but displays placeholder data
+- [x] Investigate why Monitoring page shows "no sources" while Command Center shows Dexcom connected
+- [x] Unify data sources so both pages query the same Dexcom glucose data
+- [x] Verify both Command Center and Monitoring display consistent data after fix
+- [x] Fixed Monitoring to show all sources (not just custom_app)
+- [x] Monitoring now displays Dexcom CGM as connected source
+- [x] Both pages now use the same unified data source
+
+## UI Issue - Layout Hidden Behind Sidebar (v1.25 - RESOLVED)
+
+- [x] Fix dashboard content being hidden behind left sidebar on PC
+- [x] Resize right content area to fit properly without horizontal scroll
+- [x] Ensure responsive layout works on all screen sizes
+- [x] Added w-full overflow-x-auto to DashboardLayout main element
+- [x] Updated Dashboard grid to responsive: grid-cols-1 sm:grid-cols-2 lg:grid-cols-4
+- [x] All dashboard content now visible without horizontal scroll

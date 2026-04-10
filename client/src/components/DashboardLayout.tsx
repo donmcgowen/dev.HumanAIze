@@ -159,7 +159,7 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
             Engineering-style unified analytics workspace
           </div>
         </div>
-        <main className="min-h-[calc(100vh-4rem)] p-4 md:p-6">{children}</main>
+        <main className="min-h-[calc(100vh-4rem)] p-4 md:p-6 w-full overflow-x-auto">{children}</main>
       </SidebarInset>
     </div>
   );

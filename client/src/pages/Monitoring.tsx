@@ -10,6 +10,7 @@ import { useState } from "react";
 export function Monitoring() {
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: sources, isLoading: sourcesLoading } = trpc.sources.list.useQuery();
+  const { data: dashboard } = trpc.health.dashboard.useQuery({ rangeDays: 14 });
   const [, navigate] = useLocation();
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
@@ -21,15 +22,15 @@ export function Monitoring() {
     );
   }
 
-  // Filter to show only custom apps
-  const customAppSources = sources?.filter((s) => s.provider === "custom_app") || [];
-  const connectedCustomApps = customAppSources.filter((s) => s.status === "connected");
+  // Show all connected sources (Dexcom, Connect App, etc.)
+  const allSources = sources || [];
+  const connectedSources = allSources.filter((s) => s.status === "connected");
 
   // Generate insights based on connected sources
   const generateInsights = () => {
     const insights = [];
     
-    if (connectedCustomApps.length === 0) {
+    if (connectedSources.length === 0) {
       insights.push({
         type: "tip" as const,
         title: "Get Started with Health Monitoring",
@@ -40,11 +41,11 @@ export function Monitoring() {
       insights.push({
         type: "success" as const,
         title: "Data Sources Connected",
-        description: `You have ${connectedCustomApps.length} active health data source${connectedCustomApps.length !== 1 ? 's' : ''} syncing your metrics.`,
+        description: `You have ${connectedSources.length} active health data source${connectedSources.length !== 1 ? 's' : ''} syncing your metrics.`,
         action: "Keep your sources connected for continuous health insights."
       });
       
-      if (connectedCustomApps.length < 3) {
+      if (connectedSources.length < 3) {
         insights.push({
           type: "tip" as const,
           title: "Add More Data Sources",
@@ -87,7 +88,7 @@ export function Monitoring() {
             </div>
           </CardHeader>
           <CardContent>
-            {connectedCustomApps.length === 0 ? (
+            {connectedSources.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-4">No connected sources yet</p>
                 <Button
@@ -99,7 +100,7 @@ export function Monitoring() {
               </div>
             ) : (
               <div className="space-y-2">
-                {connectedCustomApps.map((source) => (
+                {connectedSources.map((source) => (
                   <div
                     key={source.id}
                     className="p-4 rounded-lg bg-slate-900 border border-green-500/30 cursor-pointer hover:bg-slate-800 transition-colors"
@@ -170,23 +171,23 @@ export function Monitoring() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Average Glucose</p>
-                <p className="text-2xl font-bold text-red-400">-- mg/dL</p>
-                <p className="text-xs text-slate-500 mt-1">Connect a glucose source to view</p>
+                <p className="text-2xl font-bold text-red-400">{dashboard?.summary.glucoseAverage.toFixed(1) ?? '--'} mg/dL</p>
+                <p className="text-xs text-slate-500 mt-1">{dashboard?.summary.glucoseAverage ? 'From connected sources' : 'Connect a glucose source to view'}</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Daily Activity</p>
-                <p className="text-2xl font-bold text-blue-400">-- steps</p>
-                <p className="text-xs text-slate-500 mt-1">Connect an activity source to view</p>
+                <p className="text-2xl font-bold text-blue-400">{dashboard?.summary.stepsAverage.toLocaleString() ?? '--'} steps</p>
+                <p className="text-xs text-slate-500 mt-1">{dashboard?.summary.stepsAverage ? 'From connected sources' : 'Connect an activity source to view'}</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Average Sleep</p>
-                <p className="text-2xl font-bold text-purple-400">-- hours</p>
-                <p className="text-xs text-slate-500 mt-1">Connect a sleep source to view</p>
+                <p className="text-2xl font-bold text-purple-400">{dashboard?.summary.sleepAverage.toFixed(1) ?? '--'} hours</p>
+                <p className="text-xs text-slate-500 mt-1">{dashboard?.summary.sleepAverage ? 'From connected sources' : 'Connect a sleep source to view'}</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
-                <p className="text-slate-400 text-sm mb-2">Heart Rate</p>
-                <p className="text-2xl font-bold text-orange-400">-- bpm</p>
-                <p className="text-xs text-slate-500 mt-1">Connect a heart rate source to view</p>
+                <p className="text-slate-400 text-sm mb-2">Time in Range</p>
+                <p className="text-2xl font-bold text-green-400">{dashboard?.summary.timeInRangeEstimate ?? '--'}%</p>
+                <p className="text-xs text-slate-500 mt-1">{dashboard?.summary.timeInRangeEstimate ? 'Glucose 80-160 mg/dL' : 'Connect a glucose source to view'}</p>
               </div>
             </div>
           </CardContent>

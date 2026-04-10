@@ -46,7 +46,7 @@ export default function Dashboard() {
   const { summary, chart, sourcesByCategory } = dashboard;
 
   return (
-    <div className="space-y-8 p-6">
+    <div className="space-y-8 p-6 w-full max-w-full">
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-3xl font-bold">Command Center</h1>
@@ -59,7 +59,7 @@ export default function Dashboard() {
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
           <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Glucose Average</div>
           <div className="text-3xl font-bold">{summary.glucoseAverage.toFixed(1)}</div>
