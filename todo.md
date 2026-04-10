@@ -113,9 +113,9 @@
 
 ## New Requests (v1.9 Cleanup)
 
-- [ ] Remove pre-configured sources (Dexcom, Fitbit, Apple Health, Oura, Google Fit) from Monitoring page
-- [ ] Filter sources list to show only custom_app provider entries
-- [ ] Test Monitoring page displays only user-created custom apps
+- [x] Remove pre-configured sources (Dexcom, Fitbit, Apple Health, Oura, Google Fit) from Monitoring page
+- [x] Filter sources list to show only custom_app provider entries (line 25 in Monitoring.tsx)
+- [x] Test Monitoring page displays only user-created custom apps
 
 
 ## Critical Bugs - Food Logging (v1.9 Hotfix - Complete)
@@ -147,7 +147,7 @@
 - [x] Add tRPC endpoint to check sync status (trpc.sync.status)
 - [x] Add retry logic with exponential backoff for failed syncs (2 retries per source)
 - [x] Add UI indicator showing last sync time and status (on Dashboard header)
-- [ ] Add backend tests for background sync scheduler
+- [x] Add backend tests for background sync scheduler (7 tests passing: status tracking, retry backoff, sync updates)
 
 
 ## Custom Source Management (v1.12 - Complete)
