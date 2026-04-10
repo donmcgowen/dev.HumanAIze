@@ -17,6 +17,7 @@ import {
   sendChatMessage,
   triggerSourceSync,
 } from "./healthEngine";
+import { storeSourceCredentials } from "./credentials";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
@@ -53,6 +54,20 @@ export const appRouter = router({
     sync: protectedProcedure
       .input(z.object({ sourceId: z.number().int() }))
       .mutation(({ ctx, input }) => triggerSourceSync(ctx.user.id, input.sourceId)),
+    storeCredentials: protectedProcedure
+      .input(
+        z.object({
+          sourceId: z.number().int(),
+          credentials: z.record(z.string(), z.string()),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        storeSourceCredentials(
+          ctx.user.id,
+          input.sourceId,
+          input.credentials as Record<string, string>
+        )
+      ),
   }),
   assistant: router({
     threads: protectedProcedure.query(({ ctx }) => listChatThreads(ctx.user.id)),

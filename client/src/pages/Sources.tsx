@@ -3,21 +3,37 @@ import { AlertCircle, CheckCircle2, Clock, Link2, Unlink2, RefreshCw } from "luc
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CredentialDialog } from "@/components/CredentialDialog";
 
 export default function Sources() {
   const { data: sources, isLoading, refetch } = trpc.sources.list.useQuery();
   const connectMutation = trpc.sources.connect.useMutation();
   const disconnectMutation = trpc.sources.disconnect.useMutation();
   const syncMutation = trpc.sources.sync.useMutation();
+  const storeCredentialsMutation = trpc.sources.storeCredentials.useMutation();
   const [syncing, setSyncing] = useState<Set<number>>(new Set());
+  const [selectedSource, setSelectedSource] = useState<any>(null);
+  const [credentialDialogOpen, setCredentialDialogOpen] = useState(false);
 
-  const handleConnect = async (sourceId: number) => {
+  const handleConnect = async (source: any) => {
+    // Open credential dialog for user input
+    setSelectedSource(source);
+    setCredentialDialogOpen(true);
+  };
+
+  const handleCredentialsSubmit = async (credentials: Record<string, string>) => {
+    if (!selectedSource) return;
+
     try {
-      await connectMutation.mutateAsync({ sourceId });
+      await storeCredentialsMutation.mutateAsync({
+        sourceId: selectedSource.id,
+        credentials,
+      });
       await refetch();
-      toast.success("Source connected successfully");
+      toast.success(`${selectedSource.displayName} connected successfully`);
     } catch (error) {
-      toast.error("Failed to connect source");
+      console.error("Failed to store credentials:", error);
+      toast.error(`Failed to connect ${selectedSource.displayName}`);
     }
   };
 
@@ -84,7 +100,7 @@ export default function Sources() {
             <SourceCard
               key={source.id}
               source={source}
-              onConnect={() => handleConnect(source.id)}
+              onConnect={() => handleConnect(source)}
               onDisconnect={() => handleDisconnect(source.id)}
               onSync={() => handleSync(source.id)}
               isSyncing={syncing.has(source.id)}
@@ -101,7 +117,7 @@ export default function Sources() {
             <SourceCard
               key={source.id}
               source={source}
-              onConnect={() => handleConnect(source.id)}
+              onConnect={() => handleConnect(source)}
               onDisconnect={() => handleDisconnect(source.id)}
               onSync={() => handleSync(source.id)}
               isSyncing={syncing.has(source.id)}
@@ -118,7 +134,7 @@ export default function Sources() {
             <SourceCard
               key={source.id}
               source={source}
-              onConnect={() => handleConnect(source.id)}
+              onConnect={() => handleConnect(source)}
               onDisconnect={() => handleDisconnect(source.id)}
               onSync={() => handleSync(source.id)}
               isSyncing={syncing.has(source.id)}
@@ -135,7 +151,7 @@ export default function Sources() {
             <SourceCard
               key={source.id}
               source={source}
-              onConnect={() => handleConnect(source.id)}
+              onConnect={() => handleConnect(source)}
               onDisconnect={() => handleDisconnect(source.id)}
               onSync={() => handleSync(source.id)}
               isSyncing={syncing.has(source.id)}
@@ -143,6 +159,17 @@ export default function Sources() {
           ))}
         </div>
       </div>
+
+      {/* Credential Dialog */}
+      {selectedSource && (
+        <CredentialDialog
+          open={credentialDialogOpen}
+          onOpenChange={setCredentialDialogOpen}
+          source={selectedSource}
+          onSubmit={handleCredentialsSubmit}
+          isLoading={storeCredentialsMutation.isPending}
+        />
+      )}
     </div>
   );
 }

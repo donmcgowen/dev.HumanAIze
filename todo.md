@@ -8,17 +8,22 @@
 - [x] Build a unified dashboard that shows glucose, activity, nutrition, and sleep in one view with interactive charts.
 - [x] Add date-range filtering for historical trend exploration across all major health metrics.
 - [x] Build a Connected Sources page that manages all integrations from one place, including link status, last sync time, and sync state.
-- [ ] Implement Dexcom OAuth connection flow and glucose data import scaffolding.
-- [ ] Implement Glooko connection flow and diabetes management data import scaffolding.
-- [ ] Implement fitness source connection and import scaffolding for Apple Health, Google Fit, and Fitbit.
-- [ ] Implement food logging connection and import scaffolding for MyFitnessPal and Cronometer.
-- [ ] Implement sleep source connection and import scaffolding for Oura, Fitbit, and Apple Health.
+- [x] Create credential input dialog/modal for all health sources (OAuth tokens, API keys).
+- [ ] Add live credential validation testing before marking sources as connected (test against real APIs).
+- [ ] Implement real Dexcom OAuth token validation with live API testing.
+- [ ] Implement real Glooko API key validation with live API testing.
+- [ ] Test end-user connection flow with real Dexcom credentials.
+- [ ] Test end-user connection flow with real Glooko credentials.
+- [x] Add generic "Custom App" option for connecting unlisted health data sources.
 - [ ] Build a unified normalization layer that maps imported source data into shared metric models.
+- [ ] Implement actual data import from Dexcom glucose readings.
+- [ ] Implement actual data import from Glooko diabetes management data.
 - [x] Implement an AI-powered insight engine that analyzes relationships between glucose, exercise, nutrition, and sleep and surfaces personalized recommendations.
 - [x] Build a context-aware AI chat assistant that answers natural-language questions using the user's synced metrics.
 - [x] Implement data history and trend views with multi-metric comparisons and summaries.
 - [x] Implement weekly summary generation covering glucose, sleep, activity, and AI-generated insights.
 - [ ] Implement automated weekly email delivery orchestration and summary status tracking.
+- [x] Create credential input interface for end users to connect health data sources.
 - [x] Add backend tests for core health analytics logic (27 pure math tests pass; DB integration tests scaffolded).
 - [x] Document required third-party credentials, API integration limitations, and deployment requirements.
 - [x] Validate the app in browser, verify all pages load correctly, and prepare final delivery checkpoint.
