@@ -22,7 +22,7 @@ export function FoodLogging() {
           <p className="text-slate-400">Track your daily meals and macronutrients</p>
         </div>
 
-        <FoodLogger userId={user.id} />
+        <FoodLogger />
 
         <div className="mt-8">
           <InsightsPanel 

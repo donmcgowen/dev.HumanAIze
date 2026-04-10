@@ -1,285 +1,294 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FOOD_DATABASE, calculateMacros, searchFoods } from "@/../../shared/foodDatabase";
 import { toast } from "sonner";
-import { Trash2, Plus } from "lucide-react";
+import { Plus, Trash2, Search } from "lucide-react";
 
-// Common foods library with approximate macros
-const COMMON_FOODS = [
-  { name: "Chicken Breast (100g)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
-  { name: "Brown Rice (1 cup cooked)", calories: 215, protein: 5, carbs: 45, fat: 1.8 },
-  { name: "Broccoli (1 cup)", calories: 55, protein: 3.7, carbs: 11, fat: 0.6 },
-  { name: "Salmon (100g)", calories: 208, protein: 20, carbs: 0, fat: 13 },
-  { name: "Egg (1 large)", calories: 78, protein: 6, carbs: 0.6, fat: 5 },
-  { name: "Banana (1 medium)", calories: 105, protein: 1.3, carbs: 27, fat: 0.3 },
-  { name: "Oatmeal (1 cup cooked)", calories: 150, protein: 5, carbs: 27, fat: 3 },
-  { name: "Almonds (1 oz)", calories: 164, protein: 6, carbs: 6, fat: 14 },
-  { name: "Greek Yogurt (1 cup)", calories: 130, protein: 23, carbs: 9, fat: 0.4 },
-  { name: "Sweet Potato (1 medium)", calories: 103, protein: 2.3, carbs: 24, fat: 0.1 },
-];
-
-export function FoodLogger({ userId }: { userId: number }) {
-  const [selectedFood, setSelectedFood] = useState("");
-  const [customFood, setCustomFood] = useState({
-    name: "",
-    calories: "",
-    protein: "",
-    carbs: "",
-    fat: "",
-  });
-  const [mealType, setMealType] = useState("lunch");
-  const [showCustom, setShowCustom] = useState(false);
-
-  const { data: todayLogs, refetch: refetchLogs } = trpc.food.getDayLogs.useQuery({
+export function FoodLogger() {
+  const { data: foodLogs, isLoading, refetch } = trpc.food.getDayLogs.useQuery({
     startOfDay: new Date(new Date().setHours(0, 0, 0, 0)).getTime(),
     endOfDay: new Date(new Date().setHours(23, 59, 59, 999)).getTime(),
   });
-
-  const addLog = trpc.food.addLog.useMutation({
+  const addFoodLog = trpc.food.addLog.useMutation({
     onSuccess: () => {
-      toast.success("Food logged successfully!");
-      refetchLogs();
-      setSelectedFood("");
-      setCustomFood({ name: "", calories: "", protein: "", carbs: "", fat: "" });
-      setShowCustom(false);
+      refetch();
+      setSelectedFood(null);
+      setQuantity("");
+      setQuantityUnit("grams");
+      setSearchQuery("");
+      toast.success("Food logged successfully");
     },
-    onError: (error) => {
-      toast.error(error.message || "Failed to log food");
+    onError: () => {
+      toast.error("Failed to log food");
+    },
+  });
+  const deleteFoodLog = trpc.food.deleteLog.useMutation({
+    onSuccess: () => {
+      refetch();
+      toast.success("Food removed");
     },
   });
 
-  const deleteLog = trpc.food.deleteLog.useMutation({
-    onSuccess: () => {
-      toast.success("Food log deleted");
-      refetchLogs();
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to delete food log");
-    },
-  });
+  const [selectedFood, setSelectedFood] = useState<string | null>(null);
+  const [quantity, setQuantity] = useState("");
+  const [quantityUnit, setQuantityUnit] = useState("grams");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  const handleAddFood = () => {
-    if (showCustom) {
-      if (!customFood.name || !customFood.calories || !customFood.protein || !customFood.carbs || !customFood.fat) {
-        toast.error("Please fill in all fields");
-        return;
-      }
-      addLog.mutate({
-        foodName: customFood.name,
-        calories: parseInt(customFood.calories),
-        proteinGrams: parseFloat(customFood.protein),
-        carbsGrams: parseFloat(customFood.carbs),
-        fatGrams: parseFloat(customFood.fat),
-        loggedAt: Date.now(),
-        mealType: mealType as any,
-      });
-    } else if (selectedFood) {
-      const food = COMMON_FOODS.find((f) => f.name === selectedFood);
-      if (food) {
-        addLog.mutate({
-          foodName: food.name,
-          calories: food.calories,
-          proteinGrams: food.protein,
-          carbsGrams: food.carbs,
-          fatGrams: food.fat,
-          loggedAt: Date.now(),
-          mealType: mealType as any,
-        });
-      }
-    } else {
-      toast.error("Please select or enter a food");
+  // Filter foods based on search
+  const filteredFoods = useMemo(() => {
+    if (!searchQuery) return FOOD_DATABASE.slice(0, 15);
+    return searchFoods(searchQuery).slice(0, 15);
+  }, [searchQuery]);
+
+  // Get selected food details
+  const selectedFoodItem = selectedFood
+    ? FOOD_DATABASE.find(f => f.id === selectedFood)
+    : null;
+
+  // Convert quantity to grams
+  const getQuantityInGrams = (): number => {
+    const qty = parseFloat(quantity);
+    if (!qty || isNaN(qty)) return 0;
+
+    switch (quantityUnit) {
+      case "oz":
+        return qty * 28.35; // 1 oz = 28.35g
+      case "lbs":
+        return qty * 453.6; // 1 lb = 453.6g
+      case "cup":
+        return qty * 240; // 1 cup ≈ 240g (approximate)
+      case "grams":
+      default:
+        return qty;
     }
   };
 
+  // Calculate macros for selected food and quantity
+  const calculatedMacros = useMemo(() => {
+    if (!selectedFoodItem || !quantity) {
+      return { protein: 0, carbs: 0, fat: 0, calories: 0 };
+    }
+    const quantityInGrams = getQuantityInGrams();
+    return calculateMacros(selectedFoodItem, quantityInGrams);
+  }, [selectedFoodItem, quantity, quantityUnit]);
+
+  // Handle adding food log
+  const handleAddFood = () => {
+    if (!selectedFoodItem || !quantity) {
+      toast.error("Please select a food and enter quantity");
+      return;
+    }
+
+    const quantityInGrams = getQuantityInGrams();
+    addFoodLog.mutate({
+      foodName: selectedFoodItem.name,
+      calories: calculatedMacros.calories,
+      proteinGrams: calculatedMacros.protein,
+      carbsGrams: calculatedMacros.carbs,
+      fatGrams: calculatedMacros.fat,
+      loggedAt: Date.now(),
+    });
+  };
+
   // Calculate daily totals
-  const totals = todayLogs?.reduce(
-    (acc, log) => ({
-      calories: acc.calories + log.calories,
-      protein: acc.protein + log.proteinGrams,
-      carbs: acc.carbs + log.carbsGrams,
-      fat: acc.fat + log.fatGrams,
-    }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
-  ) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
+  const dailyTotals = useMemo(() => {
+    if (!foodLogs) return { protein: 0, carbs: 0, fat: 0, calories: 0 };
+    return foodLogs.reduce(
+      (acc: any, log: any) => ({
+        protein: acc.protein + (log.protein || 0),
+        carbs: acc.carbs + (log.carbs || 0),
+        fat: acc.fat + (log.fat || 0),
+        calories: acc.calories + (log.calories || 0),
+      }),
+      { protein: 0, carbs: 0, fat: 0, calories: 0 }
+    );
+  }, [foodLogs]);
 
   return (
     <div className="space-y-6">
-      <Card>
+      {/* Food Input Card */}
+      <Card className="border-white/10 bg-white/[0.03]">
         <CardHeader>
-          <CardTitle>Food Logger</CardTitle>
-          <CardDescription>Log your meals and track daily macros</CardDescription>
+          <CardTitle>Log Food</CardTitle>
+          <CardDescription>Search and add foods to track your macros</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Quick Food Selection */}
+          {/* Food Search */}
           <div className="space-y-2">
-            <Label>Quick Add Food</Label>
-            <Select value={selectedFood} onValueChange={setSelectedFood} disabled={showCustom}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a common food..." />
-              </SelectTrigger>
-              <SelectContent>
-                {COMMON_FOODS.map((food) => (
-                  <SelectItem key={food.name} value={food.name}>
-                    {food.name} - {food.calories} cal
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="food-search">Food Name</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+              <Input
+                id="food-search"
+                placeholder="Search foods (e.g., chicken breast, salmon, broccoli)"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setShowDropdown(true);
+                }}
+                onFocus={() => setShowDropdown(true)}
+                className="pl-10 border-white/10 bg-white/[0.03]"
+              />
+              {showDropdown && searchQuery && filteredFoods.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 border border-white/10 bg-slate-900 rounded max-h-48 overflow-y-auto shadow-lg">
+                  {filteredFoods.map((food) => (
+                    <button
+                      key={food.id}
+                      onClick={() => {
+                        setSelectedFood(food.id);
+                        setSearchQuery(food.name);
+                        setShowDropdown(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-white/10 border-b border-white/5 last:border-b-0 text-sm transition"
+                    >
+                      <div className="font-medium text-white">{food.name}</div>
+                      <div className="text-xs text-slate-400">
+                        {food.macros.protein}g protein, {food.macros.carbs}g carbs, {food.macros.fat}g fat • {food.calories} cal/100g
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Custom Food Entry */}
-          {showCustom && (
-            <div className="space-y-3 p-4 bg-muted rounded-lg">
-              <div>
-                <Label htmlFor="foodName">Food Name</Label>
-                <Input
-                  id="foodName"
-                  placeholder="e.g., Grilled Chicken with Rice"
-                  value={customFood.name}
-                  onChange={(e) => setCustomFood({ ...customFood, name: e.target.value })}
-                />
+          {/* Quantity Input */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="quantity">Quantity</Label>
+              <Input
+                id="quantity"
+                type="number"
+                placeholder="e.g., 3"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                className="border-white/10 bg-white/[0.03]"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="unit">Unit</Label>
+              <Select value={quantityUnit} onValueChange={setQuantityUnit}>
+                <SelectTrigger className="border-white/10 bg-white/[0.03]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-white/10 bg-slate-900">
+                  <SelectItem value="grams">g</SelectItem>
+                  <SelectItem value="oz">oz</SelectItem>
+                  <SelectItem value="lbs">lbs</SelectItem>
+                  <SelectItem value="cup">cup</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Auto-calculated Macros Display */}
+          {selectedFoodItem && quantity && (
+            <div className="bg-cyan-300/10 border border-cyan-300/30 rounded p-4 space-y-3">
+              <div className="text-sm font-semibold text-cyan-100">
+                {selectedFoodItem.name} - {quantity} {quantityUnit}
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="calories">Calories</Label>
-                  <Input
-                    id="calories"
-                    type="number"
-                    placeholder="0"
-                    value={customFood.calories}
-                    onChange={(e) => setCustomFood({ ...customFood, calories: e.target.value })}
-                  />
+              <div className="grid grid-cols-4 gap-2 text-sm">
+                <div className="bg-white/5 p-2 rounded">
+                  <div className="text-xs text-slate-400">Protein</div>
+                  <div className="font-bold text-white">{calculatedMacros.protein}g</div>
                 </div>
-                <div>
-                  <Label htmlFor="protein">Protein (g)</Label>
-                  <Input
-                    id="protein"
-                    type="number"
-                    placeholder="0"
-                    value={customFood.protein}
-                    onChange={(e) => setCustomFood({ ...customFood, protein: e.target.value })}
-                  />
+                <div className="bg-white/5 p-2 rounded">
+                  <div className="text-xs text-slate-400">Carbs</div>
+                  <div className="font-bold text-white">{calculatedMacros.carbs}g</div>
                 </div>
-                <div>
-                  <Label htmlFor="carbs">Carbs (g)</Label>
-                  <Input
-                    id="carbs"
-                    type="number"
-                    placeholder="0"
-                    value={customFood.carbs}
-                    onChange={(e) => setCustomFood({ ...customFood, carbs: e.target.value })}
-                  />
+                <div className="bg-white/5 p-2 rounded">
+                  <div className="text-xs text-slate-400">Fat</div>
+                  <div className="font-bold text-white">{calculatedMacros.fat}g</div>
                 </div>
-                <div>
-                  <Label htmlFor="fat">Fat (g)</Label>
-                  <Input
-                    id="fat"
-                    type="number"
-                    placeholder="0"
-                    value={customFood.fat}
-                    onChange={(e) => setCustomFood({ ...customFood, fat: e.target.value })}
-                  />
+                <div className="bg-white/5 p-2 rounded">
+                  <div className="text-xs text-slate-400">Calories</div>
+                  <div className="font-bold text-white">{calculatedMacros.calories}</div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Meal Type Selection */}
-          <div className="space-y-2">
-            <Label>Meal Type</Label>
-            <Select value={mealType} onValueChange={setMealType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="breakfast">Breakfast</SelectItem>
-                <SelectItem value="lunch">Lunch</SelectItem>
-                <SelectItem value="dinner">Dinner</SelectItem>
-                <SelectItem value="snack">Snack</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowCustom(!showCustom);
-                setSelectedFood("");
-              }}
-            >
-              {showCustom ? "Use Quick Add" : "Enter Custom Food"}
-            </Button>
-            <Button onClick={handleAddFood} disabled={addLog.isPending} className="flex-1">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Food
-            </Button>
-          </div>
+          {/* Add Button */}
+          <Button
+            onClick={handleAddFood}
+            disabled={addFoodLog.isPending || !selectedFood || !quantity}
+            className="w-full bg-cyan-500 hover:bg-cyan-600 text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {addFoodLog.isPending ? "Adding..." : "Add to Log"}
+          </Button>
         </CardContent>
       </Card>
 
       {/* Daily Summary */}
-      <Card>
+      <Card className="border-white/10 bg-white/[0.03]">
         <CardHeader>
-          <CardTitle>Today's Totals</CardTitle>
+          <CardTitle>Today's Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-500">{totals.calories}</div>
-              <div className="text-sm text-muted-foreground">Calories</div>
+          <div className="grid grid-cols-4 gap-3">
+            <div className="bg-white/5 p-3 rounded">
+              <div className="text-xs text-slate-400">Protein</div>
+              <div className="text-lg font-bold text-white">{dailyTotals.protein.toFixed(1)}g</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-500">{totals.protein.toFixed(1)}g</div>
-              <div className="text-sm text-muted-foreground">Protein</div>
+            <div className="bg-white/5 p-3 rounded">
+              <div className="text-xs text-slate-400">Carbs</div>
+              <div className="text-lg font-bold text-white">{dailyTotals.carbs.toFixed(1)}g</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-500">{totals.carbs.toFixed(1)}g</div>
-              <div className="text-sm text-muted-foreground">Carbs</div>
+            <div className="bg-white/5 p-3 rounded">
+              <div className="text-xs text-slate-400">Fat</div>
+              <div className="text-lg font-bold text-white">{dailyTotals.fat.toFixed(1)}g</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-500">{totals.fat.toFixed(1)}g</div>
-              <div className="text-sm text-muted-foreground">Fat</div>
+            <div className="bg-white/5 p-3 rounded">
+              <div className="text-xs text-slate-400">Calories</div>
+              <div className="text-lg font-bold text-white">{dailyTotals.calories}</div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Food Log History */}
-      {todayLogs && todayLogs.length > 0 && (
-        <Card>
+      {/* Food Log List */}
+      {foodLogs && foodLogs.length > 0 && (
+        <Card className="border-white/10 bg-white/[0.03]">
           <CardHeader>
-            <CardTitle>Today's Meals</CardTitle>
+            <CardTitle>Today's Foods</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {todayLogs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              {foodLogs.map((log: any) => (
+                <div
+                  key={log.id}
+                  className="flex items-center justify-between p-3 bg-white/5 rounded border border-white/10"
+                >
                   <div className="flex-1">
-                    <div className="font-medium">{log.foodName}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {log.calories} cal • P: {log.proteinGrams.toFixed(1)}g C: {log.carbsGrams.toFixed(1)}g F: {log.fatGrams.toFixed(1)}g
+                    <div className="font-medium text-white">{log.foodName}</div>
+                    <div className="text-xs text-slate-400">
+                      P: {log.protein}g | C: {log.carbs}g | F: {log.fat}g | {log.calories} cal
                     </div>
                   </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => deleteLog.mutate({ foodLogId: log.id })}
-                    disabled={deleteLog.isPending}
+                    onClick={() => deleteFoodLog.mutate({ foodLogId: log.id })}
+                    className="text-red-400 hover:bg-red-500/10"
                   >
-                    <Trash2 className="w-4 h-4 text-red-500" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {isLoading && (
+        <div className="text-center text-slate-400">Loading food logs...</div>
       )}
     </div>
   );
