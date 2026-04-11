@@ -27,19 +27,28 @@ export function BarcodeScanner({ onBarcodeScanned, isLoading = false }: BarcodeS
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0,
           disableFlip: false,
+          showTorchButtonIfSupported: true,
+          useBarCodeDetectorIfSupported: true,
+          rememberLastUsedCamera: false,
         },
         false
       );
 
       scanner.render(
         (decodedText: string) => {
-          // Check if it's a valid UPC/EAN barcode (12-14 digits)
-          if (/^\d{8,14}$/.test(decodedText)) {
+          // Accept any barcode format (UPC, EAN, Code128, etc.)
+          if (decodedText && decodedText.length > 0) {
             setIsScanning(true);
             onBarcodeScanned(decodedText);
-            scanner.clear();
-            setIsOpen(false);
-            setIsScanning(false);
+            setTimeout(() => {
+              try {
+                scanner.clear();
+              } catch (e) {
+                // Ignore cleanup errors
+              }
+              setIsOpen(false);
+              setIsScanning(false);
+            }, 500);
           }
         },
         (error: any) => {
@@ -100,7 +109,7 @@ export function BarcodeScanner({ onBarcodeScanned, isLoading = false }: BarcodeS
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle>Scan Barcode</CardTitle>
-          <CardDescription>Point camera at barcode to scan</CardDescription>
+          <CardDescription>Point camera at barcode to scan (back camera)</CardDescription>
         </div>
         <button
           onClick={handleClose}

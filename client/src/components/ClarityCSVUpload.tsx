@@ -42,8 +42,10 @@ export function ClarityCSVUpload() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith(".csv")) {
-      toast.error("Please select a CSV file");
+    const isCSV = file.name.endsWith(".csv");
+    const isPDF = file.name.endsWith(".pdf");
+    if (!isCSV && !isPDF) {
+      toast.error("Please select a CSV or PDF file");
       return;
     }
 
@@ -102,7 +104,7 @@ export function ClarityCSVUpload() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.pdf"
             onChange={handleFileSelect}
             className="hidden"
           />

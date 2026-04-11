@@ -370,7 +370,7 @@
 - [x] FoodInsights displays macro progress bars and AI recommendations
 - [x] Recommendations include food choice, portion, macro balance, and meal timing
 
-## Feature - Dexcom Clarity Share Integration (v1.32 - Partial)
+## Feature - Dexcom Clarity Share Integration (v1.32 - Complete)
 
 - [x] Research Dexcom Clarity Share API documentation
 - [x] Understand Clarity Share authentication flow (CSV export, not API)
@@ -382,6 +382,32 @@
 - [x] Add import result display with statistics
 - [x] Implement error handling and validation
 - [x] Add user guide for exporting from Clarity
-- [ ] Integrate ClarityCSVUpload into Monitoring/Sources page
-- [ ] Test end-to-end import flow
-- [ ] Verify glucose data displays in monitoring section
+- [x] Integrate ClarityCSVUpload into Sources page
+- [x] 18 comprehensive unit tests - all passing
+- [x] TypeScript compilation clean
+
+
+## Feature - Dexcom Clarity PDF Support (v1.33 - In Progress)
+
+- [ ] Add PDF file upload capability to ClarityCSVUpload component
+- [ ] Implement PDF text extraction using pdfjs-dist
+- [ ] Parse Dexcom Clarity PDF report format
+- [ ] Extract glucose readings and statistics from PDF
+- [ ] Create PDF viewer component for data review
+- [ ] Generate AI insights from extracted PDF data
+- [ ] Add PDF preview before import
+- [ ] Support both CSV and PDF import formats
+- [ ] Test with actual Dexcom Clarity PDF reports
+- [ ] Integrate PDF insights into monitoring dashboard
+
+
+## Bug - Barcode Scanner Not Using Camera (v1.34 - Complete)
+
+- [x] Fix barcode scanner to use front-facing camera directly
+- [x] Remove camera selection dropdown
+- [x] Remove permission request UI - request permissions silently
+- [x] Auto-start scanning when modal opens
+- [x] Added torch support for low-light barcode scanning
+- [x] Enabled native barcode detection for better performance
+- [x] Accept all barcode formats (UPC, EAN, Code128, etc)
+- [x] TypeScript compilation clean

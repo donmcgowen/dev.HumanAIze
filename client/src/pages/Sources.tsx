@@ -1,9 +1,10 @@
-import { trpc } from "@/lib/trpc";
 import { AlertCircle, CheckCircle2, Clock, Link2, Unlink2, RefreshCw, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { toast } from "sonner";
 import { CredentialDialog } from "@/components/CredentialDialog";
+import { ClarityCSVUpload } from "@/components/ClarityCSVUpload";
+import { trpc } from "@/lib/trpc";
 
 export default function Sources() {
   const { data: allSources, isLoading, refetch } = trpc.sources.list.useQuery();
@@ -193,6 +194,7 @@ export default function Sources() {
               isSyncing={syncing.has(source.id)}
             />
           ))}
+          <ClarityCSVUpload />
         </div>
       </div>
 
