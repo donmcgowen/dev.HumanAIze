@@ -503,3 +503,27 @@
 ## Feature - AI Food Scanner (v1.37 - SKIPPED)
 
 Note: Modal rendering issue encountered. Feature skipped for now. Can be revisited later with alternative approach (e.g., separate page route instead of modal).
+
+
+## Bug Report - Barcode Scanner Not Importing Nutrition Data (v1.38 - COMPLETE)
+
+- [x] Research barcode data sources (Open Food Facts, Barcode Lookup, UPC Database)
+- [x] Check current barcode lookup implementation
+- [x] Add support for Open Food Facts API v2 and v0 fallback
+- [x] Handle URL-based barcodes (SmartLabel URLs with cname parameter)
+- [x] Extract UPC codes from URL parameters
+- [x] Test with real product barcodes (Muscle Milk Protein Powder)
+- [x] Verify nutrition data imports correctly
+- [x] Round all macros to whole numbers (calories, protein, carbs, fat)
+- [x] Add comprehensive unit tests for barcode lookup (8 tests passing)
+
+
+## Feature - Smart Serving Size Measurement (v1.39 - In Progress)
+
+- [ ] Extract serving size and unit from Open Food Facts product data
+- [ ] Map product categories to appropriate measurement units (scoops, ounces, grams, cups, etc.)
+- [ ] Create serving size input component with product-specific units
+- [ ] Update FoodLogger to accept quantity input based on serving unit
+- [ ] Calculate macros based on actual serving size and quantity
+- [ ] Test with protein powder (scoops), drinks (ounces), meat (grams), etc.
+- [ ] Verify macro calculations are accurate for different product types

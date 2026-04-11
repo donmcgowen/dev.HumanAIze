@@ -1,6 +1,6 @@
 /**
  * Barcode lookup and nutrition data retrieval
- * Uses Open Food Facts API for barcode scanning
+ * Uses Open Food Facts API for barcode scanning with fallback support
  */
 
 interface BarcodeProduct {
@@ -16,52 +16,134 @@ interface BarcodeProduct {
 }
 
 /**
- * Look up product information by barcode using Open Food Facts API
+/**
+ * Extract numeric barcode from URL-based barcode
+ * Handles SmartLabel URLs and other redirect formats
+ */
+function extractNumericBarcode(barcode: string): string | null {
+  // If it's a URL, try to extract numeric code
+  if (barcode.includes("http") || barcode.includes(".")) {
+    // Try to find UPC codes in URL parameters (e.g., cname=00660726503270)
+    const codeMatch = barcode.match(/cname=([0-9]+)/i);
+    if (codeMatch && codeMatch[1]) {
+      const code = codeMatch[1];
+      // Remove leading zeros if it's too long (e.g., 00660726503270 -> 60726503270)
+      if (code.length > 14) {
+        return code.substring(code.length - 13);
+      }
+      if (code.length >= 8) {
+        return code;
+      }
+    }
+    
+    // Try to find any numeric sequences of 8-14 digits in the URL
+    const matches = barcode.match(/\d{8,14}/g);
+    if (matches && matches.length > 0) {
+      // Return the longest match (likely the UPC)
+      return matches.reduce((a, b) => a.length > b.length ? a : b);
+    }
+  }
+  return null;
+}
+
+/**
+ * Look up product information by barcode using multiple data sources
+ * Tries Open Food Facts first, then falls back to other sources
  */
 export async function lookupBarcodeProduct(barcode: string): Promise<BarcodeProduct | null> {
-  if (!barcode || !/^\d{8,14}$/.test(barcode)) {
-    console.error("Invalid barcode format");
+  if (!barcode) {
+    console.error("Barcode is empty");
+    return null;
+  }
+
+  let numericBarcode = barcode;
+
+  // If barcode is a URL, try to extract numeric code
+  if (barcode.includes("http") || barcode.includes(".")) {
+    const extracted = extractNumericBarcode(barcode);
+    if (extracted) {
+      numericBarcode = extracted;
+      console.log(`Extracted numeric barcode from URL: ${numericBarcode}`);
+    } else {
+      console.warn(`Could not extract numeric barcode from: ${barcode}`);
+      // Still try the original barcode
+    }
+  }
+
+  // Validate barcode format (8-14 digits for standard barcodes)
+  if (!/^\d{8,14}$/.test(numericBarcode)) {
+    console.error(`Invalid barcode format: ${numericBarcode}`);
     return null;
   }
 
   try {
-    // Try Open Food Facts API first (free, no auth required)
-    const response = await fetch(
-      `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`
+    // Try Open Food Facts API v2 first (more reliable)
+    console.log(`Looking up barcode: ${numericBarcode}`);
+    const offResponse = await fetch(
+      `https://world.openfoodfacts.net/api/v2/product/${numericBarcode}?fields=product_name,brands,nutriments,quantity`
     );
 
-    if (!response.ok) {
-      console.error(`Open Food Facts API error: ${response.status}`);
-      return null;
+    if (offResponse.ok) {
+      const data = await offResponse.json();
+      if (data.product) {
+        const product = data.product;
+        const nutrients = product.nutriments || {};
+
+        // Extract nutrition per 100g (Open Food Facts standard) - round to whole numbers
+        const calories = Math.round(nutrients["energy-kcal"] || nutrients["energy-kcal_100g"] || nutrients["energy_100g"] || 0);
+        const protein = Math.round(nutrients["proteins"] || nutrients["proteins_100g"] || 0);
+        const carbs = Math.round(nutrients["carbohydrates"] || nutrients["carbohydrates_100g"] || 0);
+        const fat = Math.round(nutrients["fat"] || nutrients["fat_100g"] || 0);
+
+        console.log(`Found product in Open Food Facts: ${product.product_name}`);
+        return {
+          name: product.product_name || "Unknown Product",
+          calories,
+          protein,
+          carbs,
+          fat,
+          servingSize: "100",
+          servingUnit: "g",
+          barcode: numericBarcode,
+          brand: product.brands || undefined,
+        };
+      }
     }
 
-    const data = await response.json();
+    // Fallback: Try Open Food Facts v0 API
+    console.log(`Open Food Facts v2 not found, trying v0 API...`);
+    const offV0Response = await fetch(
+      `https://world.openfoodfacts.org/api/v0/product/${numericBarcode}.json`
+    );
 
-    if (!data.product) {
-      console.error("Product not found in Open Food Facts");
-      return null;
+    if (offV0Response.ok) {
+      const data = await offV0Response.json();
+      if (data.product) {
+        const product = data.product;
+        const nutrients = product.nutriments || {};
+
+        const calories = Math.round(nutrients["energy-kcal"] || nutrients["energy-kcal_100g"] || 0);
+        const protein = Math.round(nutrients["proteins"] || nutrients["proteins_100g"] || 0);
+        const carbs = Math.round(nutrients["carbohydrates"] || nutrients["carbohydrates_100g"] || 0);
+        const fat = Math.round(nutrients["fat"] || nutrients["fat_100g"] || 0);
+
+        console.log(`Found product in Open Food Facts v0: ${product.product_name}`);
+        return {
+          name: product.product_name || "Unknown Product",
+          calories,
+          protein,
+          carbs,
+          fat,
+          servingSize: "100",
+          servingUnit: "g",
+          barcode: numericBarcode,
+          brand: product.brands || undefined,
+        };
+      }
     }
 
-    const product = data.product;
-    const nutrients = product.nutriments || {};
-
-    // Extract nutrition per 100g (Open Food Facts standard)
-    const calories = Math.round(nutrients["energy-kcal"] || nutrients["energy-kcal_100g"] || 0);
-    const protein = Math.round((nutrients["proteins"] || nutrients["proteins_100g"] || 0) * 10) / 10;
-    const carbs = Math.round((nutrients["carbohydrates"] || nutrients["carbohydrates_100g"] || 0) * 10) / 10;
-    const fat = Math.round((nutrients["fat"] || nutrients["fat_100g"] || 0) * 10) / 10;
-
-    return {
-      name: product.product_name || "Unknown Product",
-      calories,
-      protein,
-      carbs,
-      fat,
-      servingSize: "100",
-      servingUnit: "g",
-      barcode,
-      brand: product.brands || undefined,
-    };
+    console.error(`Product not found in Open Food Facts for barcode: ${numericBarcode}`);
+    return null;
   } catch (error) {
     console.error("Barcode lookup failed:", error);
     return null;
