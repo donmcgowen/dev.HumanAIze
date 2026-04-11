@@ -4,7 +4,7 @@
  * API Docs: https://fdc.nal.usda.gov/api-guide.html
  */
 
-const USDA_API_BASE = "https://fdc.nal.usda.gov/api/v1";
+const USDA_API_BASE = "https://api.nal.usda.gov/fdc/v1";
 const USDA_API_KEY = process.env.USDA_API_KEY || "DEMO_KEY";
 
 export interface USDAFoodResult {
@@ -38,8 +38,6 @@ export async function searchUSDAFoods(query: string): Promise<USDAFoodResult[]> 
         query,
         pageSize: 10,
         pageNumber: 1,
-        sortBy: "dataType.keyword",
-        sortOrder: "asc",
       }),
     });
 
@@ -92,9 +90,9 @@ export async function searchUSDAFoods(query: string): Promise<USDAFoodResult[]> 
  */
 export async function getUSDAFoodDetails(fdcId: string): Promise<USDAFoodResult | null> {
   try {
-    const response = await fetch(`${USDA_API_BASE}/food/${fdcId}`, {
+    const response = await fetch(`${USDA_API_BASE}/food/${fdcId}?api_key=${USDA_API_KEY}`, {
       headers: {
-        "X-Api-Key": USDA_API_KEY,
+        "Content-Type": "application/json",
       },
     });
 

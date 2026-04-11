@@ -316,3 +316,6 @@
 - [x] Simplify UI to show only one input method at a time
 - [x] Test USDA search returns results for common foods
 - [x] Test manual entry fallback works correctly
+- [x] Fix API endpoint URL from fdc.nal.usda.gov to api.nal.usda.gov
+- [x] Remove invalid sortBy/sortOrder parameters from search request
+- [x] Fix getUSDAFoodDetails to use api_key query parameter instead of header
