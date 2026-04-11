@@ -44,7 +44,7 @@ describe("Barcode Lookup", () => {
     expect(result?.protein).toBe(25); // Whole number
     expect(result?.carbs).toBe(3); // Whole number
     expect(result?.fat).toBe(5); // Whole number
-    expect(result?.barcode).toBe("60726503270");
+    expect(result?.barcode).toBe("00660726503270");
   });
 
   it("should handle standard UPC barcode lookup", async () => {

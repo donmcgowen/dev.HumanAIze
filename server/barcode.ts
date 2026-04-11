@@ -80,7 +80,7 @@ export async function lookupBarcodeProduct(barcode: string): Promise<BarcodeProd
     // Try Open Food Facts API v2 first (more reliable)
     console.log(`Looking up barcode: ${numericBarcode}`);
     const offResponse = await fetch(
-      `https://world.openfoodfacts.net/api/v2/product/${numericBarcode}?fields=product_name,brands,nutriments,quantity`
+      `https://world.openfoodfacts.net/api/v2/product/${numericBarcode}?fields=product_name,brands,nutriments,quantity,serving_size,serving_quantity,serving_quantity_unit`
     );
 
     if (offResponse.ok) {
@@ -95,6 +95,22 @@ export async function lookupBarcodeProduct(barcode: string): Promise<BarcodeProd
         const carbs = Math.round(nutrients["carbohydrates"] || nutrients["carbohydrates_100g"] || 0);
         const fat = Math.round(nutrients["fat"] || nutrients["fat_100g"] || 0);
 
+        // Extract serving size from product data or default to 100g
+        let servingSize = "100";
+        let servingUnit = "g";
+        
+        if (product.serving_quantity) {
+          servingSize = String(product.serving_quantity);
+          servingUnit = product.serving_quantity_unit || "g";
+        } else if (product.serving_size) {
+          // serving_size is typically a string like "100 g" or "1 scoop"
+          const sizeMatch = product.serving_size.match(/(\d+(?:\.\d+)?)\s*([a-zA-Z%]*)/i);
+          if (sizeMatch) {
+            servingSize = sizeMatch[1];
+            servingUnit = sizeMatch[2] || "g";
+          }
+        }
+        
         console.log(`Found product in Open Food Facts: ${product.product_name}`);
         return {
           name: product.product_name || "Unknown Product",
@@ -102,8 +118,8 @@ export async function lookupBarcodeProduct(barcode: string): Promise<BarcodeProd
           protein,
           carbs,
           fat,
-          servingSize: "100",
-          servingUnit: "g",
+          servingSize,
+          servingUnit,
           barcode: numericBarcode,
           brand: product.brands || undefined,
         };
@@ -127,6 +143,22 @@ export async function lookupBarcodeProduct(barcode: string): Promise<BarcodeProd
         const carbs = Math.round(nutrients["carbohydrates"] || nutrients["carbohydrates_100g"] || 0);
         const fat = Math.round(nutrients["fat"] || nutrients["fat_100g"] || 0);
 
+        // Extract serving size from product data or default to 100g
+        let servingSize = "100";
+        let servingUnit = "g";
+        
+        if (product.serving_quantity) {
+          servingSize = String(product.serving_quantity);
+          servingUnit = product.serving_quantity_unit || "g";
+        } else if (product.serving_size) {
+          // serving_size is typically a string like "100 g" or "1 scoop"
+          const sizeMatch = product.serving_size.match(/(\d+(?:\.\d+)?)\s*([a-zA-Z%]*)/i);
+          if (sizeMatch) {
+            servingSize = sizeMatch[1];
+            servingUnit = sizeMatch[2] || "g";
+          }
+        }
+        
         console.log(`Found product in Open Food Facts v0: ${product.product_name}`);
         return {
           name: product.product_name || "Unknown Product",
@@ -134,8 +166,8 @@ export async function lookupBarcodeProduct(barcode: string): Promise<BarcodeProd
           protein,
           carbs,
           fat,
-          servingSize: "100",
-          servingUnit: "g",
+          servingSize,
+          servingUnit,
           barcode: numericBarcode,
           brand: product.brands || undefined,
         };
