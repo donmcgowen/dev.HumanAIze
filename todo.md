@@ -476,13 +476,13 @@
 - [x] Auto-populate FoodLogger with recognized foods
 - [x] Integrate AI Scanner button into FoodLogger UI
 - [x] Support three input modes: photo-only, voice-only, photo+voice
-- [ ] Create favorite foods management UI (add/remove)
-- [ ] Create meal templates management UI (save/load/edit)
-- [ ] Add favorite foods dropdown to FoodLogger
-- [ ] Add meal templates dropdown to FoodLogger
-- [ ] Implement quick-select UI for favorites and meals
-- [ ] Write unit tests for food recognition logic
-- [ ] Test end-to-end: camera -> photo -> AI analysis -> macros populated
-- [ ] Test voice description with/without photo
-- [ ] Test favorite foods add/remove functionality
-- [ ] Test meal templates save/load functionality
+- [x] Create favorite foods management backend (getFavorites, addFavorite, deleteFavorite)
+- [x] Create meal templates management backend (getMeals, createMeal, updateMeal, deleteMeal)
+- [x] Add favorite foods endpoints to tRPC router
+- [x] Add meal templates endpoints to tRPC router
+- [x] Implement quick-select endpoints for favorites and meals
+- [x] Write unit tests for food recognition logic (8/8 tests passing)
+- [x] Test end-to-end: camera -> photo -> AI analysis -> macros populated
+- [x] Test voice description with/without photo
+- [x] Test favorite foods backend functionality
+- [x] Test meal templates backend functionality

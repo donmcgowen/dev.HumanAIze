@@ -22,7 +22,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, deleteFoodLog, updateFoodLog } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
@@ -293,6 +293,84 @@ export const appRouter = router({
           throw error;
         }
       }),
+    // Favorite Foods
+    getFavorites: protectedProcedure.query(({ ctx }) => getFavoriteFoods(ctx.user.id)),
+    addFavorite: protectedProcedure
+      .input(
+        z.object({
+          foodName: z.string().min(1),
+          servingSize: z.string().min(1),
+          calories: z.number().int().positive(),
+          proteinGrams: z.number().min(0),
+          carbsGrams: z.number().min(0),
+          fatGrams: z.number().min(0),
+          source: z.enum(["manual", "ai_recognized", "usda", "open_food_facts"]).default("manual"),
+        })
+      )
+      .mutation(({ ctx, input }) => addFavoriteFood(ctx.user.id, input)),
+    deleteFavorite: protectedProcedure
+      .input(z.object({ favoriteFoodId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) => deleteFavoriteFood(input.favoriteFoodId, ctx.user.id)),
+    // Meal Templates
+    getMeals: protectedProcedure.query(({ ctx }) => getMealTemplates(ctx.user.id)),
+    getMeal: protectedProcedure
+      .input(z.object({ mealTemplateId: z.number().int().positive() }))
+      .query(({ ctx, input }) => getMealTemplate(input.mealTemplateId, ctx.user.id)),
+    createMeal: protectedProcedure
+      .input(
+        z.object({
+          mealName: z.string().min(1),
+          mealType: z.enum(["breakfast", "lunch", "dinner", "snack", "other"]).default("other"),
+          foods: z.array(
+            z.object({
+              foodName: z.string(),
+              servingSize: z.string(),
+              calories: z.number(),
+              proteinGrams: z.number(),
+              carbsGrams: z.number(),
+              fatGrams: z.number(),
+            })
+          ),
+          totalCalories: z.number().int().positive(),
+          totalProteinGrams: z.number().min(0),
+          totalCarbsGrams: z.number().min(0),
+          totalFatGrams: z.number().min(0),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => createMealTemplate(ctx.user.id, input)),
+    updateMeal: protectedProcedure
+      .input(
+        z.object({
+          mealTemplateId: z.number().int().positive(),
+          mealName: z.string().min(1).optional(),
+          mealType: z.enum(["breakfast", "lunch", "dinner", "snack", "other"]).optional(),
+          foods: z
+            .array(
+              z.object({
+                foodName: z.string(),
+                servingSize: z.string(),
+                calories: z.number(),
+                proteinGrams: z.number(),
+                carbsGrams: z.number(),
+                fatGrams: z.number(),
+              })
+            )
+            .optional(),
+          totalCalories: z.number().int().positive().optional(),
+          totalProteinGrams: z.number().min(0).optional(),
+          totalCarbsGrams: z.number().min(0).optional(),
+          totalFatGrams: z.number().min(0).optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => {
+        const { mealTemplateId, ...updates } = input;
+        return updateMealTemplate(mealTemplateId, ctx.user.id, updates);
+      }),
+    deleteMeal: protectedProcedure
+      .input(z.object({ mealTemplateId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) => deleteMealTemplate(input.mealTemplateId, ctx.user.id)),
   }),
   sync: router({
     status: protectedProcedure.query(() => getSyncStatus()),
