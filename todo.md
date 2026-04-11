@@ -319,3 +319,17 @@
 - [x] Fix API endpoint URL from fdc.nal.usda.gov to api.nal.usda.gov
 - [x] Remove invalid sortBy/sortOrder parameters from search request
 - [x] Fix getUSDAFoodDetails to use api_key query parameter instead of header
+
+
+## Feature - Meal Organization by Type (v1.29 - Complete)
+
+- [x] Add mealType field to food entry form (breakfast, lunch, dinner, snack)
+- [x] Update FoodLogger to organize logged foods by meal type
+- [x] Display meal-specific macros under each meal section
+- [x] Show daily total macros above meal sections
+- [x] Update database queries to group foods by meal type
+- [x] Test meal organization with multiple foods per meal
+- [x] mealType field already existed in database schema
+- [x] Implemented meal type selector in food entry form
+- [x] Organized food display by meal sections with individual macros
+- [x] Added daily totals display above meal sections

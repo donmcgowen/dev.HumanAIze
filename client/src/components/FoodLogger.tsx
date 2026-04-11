@@ -19,6 +19,15 @@ interface USDAFoodResult {
   servingUnit: string;
 }
 
+type MealType = "breakfast" | "lunch" | "dinner" | "snack";
+
+const MEAL_TYPES: { value: MealType; label: string }[] = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+];
+
 export function FoodLogger() {
   // State declarations first
   const [searchQuery, setSearchQuery] = useState("");
@@ -26,6 +35,7 @@ export function FoodLogger() {
   const [selectedFood, setSelectedFood] = useState<USDAFoodResult | null>(null);
   const [quantity, setQuantity] = useState("");
   const [quantityUnit, setQuantityUnit] = useState("grams");
+  const [mealType, setMealType] = useState<MealType>("breakfast");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValues, setEditValues] = useState<Record<number, any>>({});
   const [useManualEntry, setUseManualEntry] = useState(false);
@@ -61,6 +71,7 @@ export function FoodLogger() {
       setManualProtein("");
       setManualCarbs("");
       setManualFat("");
+      setMealType("breakfast");
       toast.success("Food logged successfully");
     },
     onError: () => {
@@ -97,6 +108,7 @@ export function FoodLogger() {
         proteinGrams: log.proteinGrams,
         carbsGrams: log.carbsGrams,
         fatGrams: log.fatGrams,
+        mealType: log.mealType,
       },
     });
   };
@@ -172,6 +184,48 @@ export function FoodLogger() {
     );
   }, [foodLogs]);
 
+  // Group foods by meal type
+  const foodsByMeal = useMemo(() => {
+    if (!foodLogs) return { breakfast: [], lunch: [], dinner: [], snack: [] };
+    const grouped: Record<MealType, any[]> = {
+      breakfast: [],
+      lunch: [],
+      dinner: [],
+      snack: [],
+    };
+
+    (foodLogs as any[]).forEach((log: any) => {
+      const mealType = (log.mealType || "breakfast") as MealType;
+      if (grouped[mealType]) {
+        grouped[mealType].push(log);
+      }
+    });
+
+    return grouped;
+  }, [foodLogs]);
+
+  // Calculate macros per meal
+  const mealMacros = useMemo(() => {
+    const macros: Record<MealType, any> = {
+      breakfast: { protein: 0, carbs: 0, fat: 0, calories: 0 },
+      lunch: { protein: 0, carbs: 0, fat: 0, calories: 0 },
+      dinner: { protein: 0, carbs: 0, fat: 0, calories: 0 },
+      snack: { protein: 0, carbs: 0, fat: 0, calories: 0 },
+    };
+
+    Object.entries(foodsByMeal).forEach(([mealType, foods]: [string, any]) => {
+      (foods as any[]).forEach((log: any) => {
+        const mt = mealType as MealType;
+        macros[mt].protein += log.proteinGrams || 0;
+        macros[mt].carbs += log.carbsGrams || 0;
+        macros[mt].fat += log.fatGrams || 0;
+        macros[mt].calories += log.calories || 0;
+      });
+    });
+
+    return macros;
+  }, [foodsByMeal]);
+
   const handleAddFood = () => {
     if (useManualEntry) {
       if (!manualFoodName || !manualCalories) {
@@ -185,7 +239,7 @@ export function FoodLogger() {
         proteinGrams: parseFloat(manualProtein) || 0,
         carbsGrams: parseFloat(manualCarbs) || 0,
         fatGrams: parseFloat(manualFat) || 0,
-        mealType: "other",
+        mealType,
         loggedAt: Date.now(),
       });
     } else {
@@ -200,10 +254,140 @@ export function FoodLogger() {
         proteinGrams: Math.round(calculatedMacros.protein * 10) / 10,
         carbsGrams: Math.round(calculatedMacros.carbs * 10) / 10,
         fatGrams: Math.round(calculatedMacros.fat * 10) / 10,
-        mealType: "other",
+        mealType,
         loggedAt: Date.now(),
       });
     }
+  };
+
+  const renderMealSection = (mealType: MealType, mealLabel: string) => {
+    const meals = foodsByMeal[mealType] || [];
+    const macros = mealMacros[mealType];
+
+    return (
+      <div key={mealType} className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold text-white capitalize">{mealLabel}</h4>
+          <div className="text-xs text-slate-400">
+            {macros.calories.toFixed(0)} cal • {macros.protein.toFixed(1)}g P • {macros.carbs.toFixed(1)}g C • {macros.fat.toFixed(1)}g F
+          </div>
+        </div>
+
+        {meals.length > 0 ? (
+          <div className="space-y-2">
+            {meals.map((log: any) => (
+              <div key={log.id} className="flex items-center justify-between p-3 bg-white/5 rounded border border-white/10">
+                {editingId === log.id ? (
+                  <div className="flex-1 space-y-2">
+                    <Input
+                      value={editValues[log.id]?.foodName || ""}
+                      onChange={(e) =>
+                        setEditValues({
+                          ...editValues,
+                          [log.id]: { ...editValues[log.id], foodName: e.target.value },
+                        })
+                      }
+                      className="bg-white/10 border-white/20 text-sm"
+                    />
+                    <div className="grid grid-cols-4 gap-2">
+                      <Input
+                        type="number"
+                        placeholder="Calories"
+                        value={editValues[log.id]?.calories || ""}
+                        onChange={(e) =>
+                          setEditValues({
+                            ...editValues,
+                            [log.id]: { ...editValues[log.id], calories: parseInt(e.target.value) || 0 },
+                          })
+                        }
+                        className="bg-white/10 border-white/20 text-sm"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Protein"
+                        value={editValues[log.id]?.proteinGrams || ""}
+                        onChange={(e) =>
+                          setEditValues({
+                            ...editValues,
+                            [log.id]: { ...editValues[log.id], proteinGrams: parseFloat(e.target.value) || 0 },
+                          })
+                        }
+                        className="bg-white/10 border-white/20 text-sm"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Carbs"
+                        value={editValues[log.id]?.carbsGrams || ""}
+                        onChange={(e) =>
+                          setEditValues({
+                            ...editValues,
+                            [log.id]: { ...editValues[log.id], carbsGrams: parseFloat(e.target.value) || 0 },
+                          })
+                        }
+                        className="bg-white/10 border-white/20 text-sm"
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Fat"
+                        value={editValues[log.id]?.fatGrams || ""}
+                        onChange={(e) =>
+                          setEditValues({
+                            ...editValues,
+                            [log.id]: { ...editValues[log.id], fatGrams: parseFloat(e.target.value) || 0 },
+                          })
+                        }
+                        className="bg-white/10 border-white/20 text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleEditSave(log.id)}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" onClick={handleEditCancel} variant="outline">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1">
+                      <div className="font-medium text-white text-sm">{log.foodName}</div>
+                      <div className="text-xs text-slate-500">
+                        {log.calories} cal • {log.proteinGrams}g P • {log.carbsGrams}g C • {log.fatGrams}g F
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleEditStart(log)}
+                        className="text-slate-400 hover:text-white"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => deleteFoodLog.mutate({ foodLogId: log.id })}
+                        className="text-slate-400 hover:text-red-400"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-slate-500 italic">No foods logged</div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -241,6 +425,23 @@ export function FoodLogger() {
             >
               Manual Entry
             </Button>
+          </div>
+
+          {/* Meal Type Selection */}
+          <div>
+            <Label className="text-xs text-slate-400 mb-2 block">Meal Type</Label>
+            <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
+              <SelectTrigger className="bg-white/10 border-white/20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MEAL_TYPES.map((meal) => (
+                  <SelectItem key={meal.value} value={meal.value}>
+                    {meal.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {useManualEntry ? (
@@ -423,7 +624,7 @@ export function FoodLogger() {
       {/* Daily Summary */}
       <Card className="border-white/10 bg-white/[0.03]">
         <CardHeader>
-          <CardTitle>Today's Summary</CardTitle>
+          <CardTitle>Daily Totals</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-4 gap-3">
@@ -447,122 +648,14 @@ export function FoodLogger() {
         </CardContent>
       </Card>
 
-      {/* Food Log List */}
+      {/* Food Log by Meal Type */}
       {foodLogs && foodLogs.length > 0 && (
         <Card className="border-white/10 bg-white/[0.03]">
           <CardHeader>
             <CardTitle>Today's Foods</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {foodLogs.map((log: any) => (
-                <div key={log.id} className="flex items-center justify-between p-3 bg-white/5 rounded">
-                  {editingId === log.id ? (
-                    <div className="flex-1 space-y-2">
-                      <Input
-                        value={editValues[log.id]?.foodName || ""}
-                        onChange={(e) =>
-                          setEditValues({
-                            ...editValues,
-                            [log.id]: { ...editValues[log.id], foodName: e.target.value },
-                          })
-                        }
-                        className="bg-white/10 border-white/20 text-sm"
-                      />
-                      <div className="grid grid-cols-4 gap-2">
-                        <Input
-                          type="number"
-                          placeholder="Calories"
-                          value={editValues[log.id]?.calories || ""}
-                          onChange={(e) =>
-                            setEditValues({
-                              ...editValues,
-                              [log.id]: { ...editValues[log.id], calories: parseInt(e.target.value) || 0 },
-                            })
-                          }
-                          className="bg-white/10 border-white/20 text-sm"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Protein"
-                          value={editValues[log.id]?.proteinGrams || ""}
-                          onChange={(e) =>
-                            setEditValues({
-                              ...editValues,
-                              [log.id]: { ...editValues[log.id], proteinGrams: parseFloat(e.target.value) || 0 },
-                            })
-                          }
-                          className="bg-white/10 border-white/20 text-sm"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Carbs"
-                          value={editValues[log.id]?.carbsGrams || ""}
-                          onChange={(e) =>
-                            setEditValues({
-                              ...editValues,
-                              [log.id]: { ...editValues[log.id], carbsGrams: parseFloat(e.target.value) || 0 },
-                            })
-                          }
-                          className="bg-white/10 border-white/20 text-sm"
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Fat"
-                          value={editValues[log.id]?.fatGrams || ""}
-                          onChange={(e) =>
-                            setEditValues({
-                              ...editValues,
-                              [log.id]: { ...editValues[log.id], fatGrams: parseFloat(e.target.value) || 0 },
-                            })
-                          }
-                          className="bg-white/10 border-white/20 text-sm"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleEditSave(log.id)}
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <Check className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" onClick={handleEditCancel} variant="outline">
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex-1">
-                        <div className="font-medium text-white">{log.foodName}</div>
-                        <div className="text-xs text-slate-500">
-                          {log.calories} cal • {log.proteinGrams}g protein • {log.carbsGrams}g carbs • {log.fatGrams}g fat
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditStart(log)}
-                          className="text-slate-400 hover:text-white"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteFoodLog.mutate({ foodLogId: log.id })}
-                          className="text-slate-400 hover:text-red-400"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
+          <CardContent className="space-y-6">
+            {MEAL_TYPES.map((meal) => renderMealSection(meal.value, meal.label))}
           </CardContent>
         </Card>
       )}
