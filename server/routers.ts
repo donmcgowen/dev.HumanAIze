@@ -28,6 +28,8 @@ import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
 import { generateFoodInsights, type DailyMacros } from "./insights";
 import { parseClarityCSV, validateClarityCSV, calculateReadingStats, type GlucoseReading } from "./clarityImport";
+import { recognizeFoodFromPhoto, recognizeFoodFromVoice, recognizeFoodFromPhotoAndVoice } from "./foodRecognition";
+import { storagePut } from "./storage";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
@@ -266,6 +268,30 @@ export const appRouter = router({
           },
           macros
         );
+      }),
+    recognizeWithAI: protectedProcedure
+      .input(
+        z.object({
+          mode: z.enum(["photo", "voice", "photo+voice"]),
+          photoUrl: z.string().url().optional(),
+          audioUrl: z.string().url().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        try {
+          if (input.mode === "photo" && input.photoUrl) {
+            return await recognizeFoodFromPhoto(input.photoUrl);
+          } else if (input.mode === "voice" && input.audioUrl) {
+            return await recognizeFoodFromVoice(input.audioUrl);
+          } else if (input.mode === "photo+voice" && input.photoUrl && input.audioUrl) {
+            return await recognizeFoodFromPhotoAndVoice(input.photoUrl, input.audioUrl);
+          } else {
+            throw new Error("Invalid mode or missing required data");
+          }
+        } catch (error) {
+          console.error("[Food Recognition] Error:", error);
+          throw error;
+        }
       }),
   }),
   sync: router({

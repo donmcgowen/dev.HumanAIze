@@ -1,6 +1,6 @@
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources } from "../drizzle/schema";
+import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -247,4 +247,126 @@ export async function cleanupUnwantedSources(userId: number): Promise<void> {
       )
     );
   }
+}
+
+
+// Favorite Foods Functions
+export async function addFavoriteFood(userId: number, food: Omit<InsertFavoriteFood, 'userId'>): Promise<FavoriteFood> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  const newFood: InsertFavoriteFood = {
+    userId,
+    foodName: food.foodName,
+    servingSize: food.servingSize,
+    calories: food.calories,
+    proteinGrams: food.proteinGrams,
+    carbsGrams: food.carbsGrams,
+    fatGrams: food.fatGrams,
+    source: food.source || "manual",
+  };
+
+  const result = await db.insert(favoriteFoods).values(newFood);
+  
+  const created = await db.select().from(favoriteFoods).where(eq(favoriteFoods.userId, userId)).orderBy((t) => desc(t.createdAt)).limit(1);
+  if (!created || created.length === 0) throw new Error("Failed to add favorite food");
+  return created[0];
+}
+
+export async function getFavoriteFoods(userId: number): Promise<FavoriteFood[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get favorite foods: database not available");
+    return [];
+  }
+
+  return db.select().from(favoriteFoods).where(eq(favoriteFoods.userId, userId)).orderBy((t) => desc(t.createdAt));
+}
+
+export async function deleteFavoriteFood(favoriteFoodId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  await db.delete(favoriteFoods).where(and(eq(favoriteFoods.id, favoriteFoodId), eq(favoriteFoods.userId, userId)));
+  return true;
+}
+
+// Meal Templates Functions
+export async function createMealTemplate(userId: number, meal: Omit<InsertMealTemplate, 'userId'>): Promise<MealTemplate> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  const newMeal: InsertMealTemplate = {
+    userId,
+    mealName: meal.mealName,
+    mealType: meal.mealType || "other",
+    foods: meal.foods,
+    totalCalories: meal.totalCalories,
+    totalProteinGrams: meal.totalProteinGrams,
+    totalCarbsGrams: meal.totalCarbsGrams,
+    totalFatGrams: meal.totalFatGrams,
+    notes: meal.notes,
+  };
+
+  const result = await db.insert(mealTemplates).values(newMeal);
+  
+  const created = await db.select().from(mealTemplates).where(eq(mealTemplates.userId, userId)).orderBy((t) => desc(t.createdAt)).limit(1);
+  if (!created || created.length === 0) throw new Error("Failed to create meal template");
+  return created[0];
+}
+
+export async function getMealTemplates(userId: number): Promise<MealTemplate[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get meal templates: database not available");
+    return [];
+  }
+
+  return db.select().from(mealTemplates).where(eq(mealTemplates.userId, userId)).orderBy((t) => desc(t.createdAt));
+}
+
+export async function getMealTemplate(mealTemplateId: number, userId: number): Promise<MealTemplate | null> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  const result = await db.select().from(mealTemplates).where(and(eq(mealTemplates.id, mealTemplateId), eq(mealTemplates.userId, userId))).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateMealTemplate(
+  mealTemplateId: number,
+  userId: number,
+  updates: Partial<Omit<InsertMealTemplate, 'userId'>>
+): Promise<MealTemplate> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  await db
+    .update(mealTemplates)
+    .set(updates)
+    .where(and(eq(mealTemplates.id, mealTemplateId), eq(mealTemplates.userId, userId)));
+
+  const updated = await db.select().from(mealTemplates).where(eq(mealTemplates.id, mealTemplateId)).limit(1);
+  if (!updated || updated.length === 0) throw new Error("Failed to update meal template");
+  return updated[0];
+}
+
+export async function deleteMealTemplate(mealTemplateId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  await db.delete(mealTemplates).where(and(eq(mealTemplates.id, mealTemplateId), eq(mealTemplates.userId, userId)));
+  return true;
 }

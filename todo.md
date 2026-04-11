@@ -461,3 +461,28 @@
 - [x] Barcode scanner modal opens correctly when button clicked
 - [x] Camera error handling displays gracefully with helpful instructions
 - [x] Component ready for production use with real camera devices
+
+
+## Feature - AI Food Photo Recognition (v1.35 - In Progress)
+
+- [x] Update database schema to add favorite_foods table (id, userId, foodName, calories, protein, carbs, fat, createdAt)
+- [x] Update database schema to add meal_templates table (id, userId, mealName, mealType, foods array, totalCalories, totalProtein, totalCarbs, totalFat, createdAt)
+- [x] Create AIFoodScanner component with camera + voice interface
+- [x] Implement photo capture using native Web API (getUserMedia)
+- [x] Implement voice recording using Web Audio API
+- [x] Create food recognition endpoint using Gemini API vision + multimodal capabilities
+- [x] Add voice transcription support (speech-to-text)
+- [x] Parse Gemini response to extract food items and estimated macros
+- [x] Auto-populate FoodLogger with recognized foods
+- [x] Integrate AI Scanner button into FoodLogger UI
+- [x] Support three input modes: photo-only, voice-only, photo+voice
+- [ ] Create favorite foods management UI (add/remove)
+- [ ] Create meal templates management UI (save/load/edit)
+- [ ] Add favorite foods dropdown to FoodLogger
+- [ ] Add meal templates dropdown to FoodLogger
+- [ ] Implement quick-select UI for favorites and meals
+- [ ] Write unit tests for food recognition logic
+- [ ] Test end-to-end: camera -> photo -> AI analysis -> macros populated
+- [ ] Test voice description with/without photo
+- [ ] Test favorite foods add/remove functionality
+- [ ] Test meal templates save/load functionality

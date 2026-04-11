@@ -225,6 +225,34 @@ export const foodLogs = mysqlTable("food_logs", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const favoriteFoods = mysqlTable("favorite_foods", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  foodName: varchar("foodName", { length: 191 }).notNull(),
+  servingSize: varchar("servingSize", { length: 120 }).notNull(),
+  calories: int("calories").notNull(),
+  proteinGrams: double("proteinGrams").notNull(),
+  carbsGrams: double("carbsGrams").notNull(),
+  fatGrams: double("fatGrams").notNull(),
+  source: mysqlEnum("source", ["manual", "ai_recognized", "usda", "open_food_facts"]).default("manual").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const mealTemplates = mysqlTable("meal_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  mealName: varchar("mealName", { length: 191 }).notNull(),
+  mealType: mysqlEnum("mealType", ["breakfast", "lunch", "dinner", "snack", "other"]).default("other").notNull(),
+  foods: json("foods").notNull(), // Array of { foodId, quantity, unit }
+  totalCalories: int("totalCalories").notNull(),
+  totalProteinGrams: double("totalProteinGrams").notNull(),
+  totalCarbsGrams: double("totalCarbsGrams").notNull(),
+  totalFatGrams: double("totalFatGrams").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type HealthSource = typeof healthSources.$inferSelect;
@@ -243,3 +271,7 @@ export type NutritionPlan = typeof nutritionPlans.$inferSelect;
 export type InsertNutritionPlan = typeof nutritionPlans.$inferInsert;
 export type FoodLog = typeof foodLogs.$inferSelect;
 export type InsertFoodLog = typeof foodLogs.$inferInsert;
+export type FavoriteFood = typeof favoriteFoods.$inferSelect;
+export type InsertFavoriteFood = typeof favoriteFoods.$inferInsert;
+export type MealTemplate = typeof mealTemplates.$inferSelect;
+export type InsertMealTemplate = typeof mealTemplates.$inferInsert;

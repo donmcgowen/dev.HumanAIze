@@ -11,6 +11,7 @@ import { BarcodeScanner } from "./BarcodeScanner";
 import { QuantitySelector } from "./QuantitySelector";
 import { SizeSelector } from "./SizeSelector";
 import { FoodInsights } from "./FoodInsights";
+import { AIFoodScanner } from "./AIFoodScanner";
 
 interface USDAFoodResult {
   fdcId: string;
@@ -52,6 +53,7 @@ export function FoodLogger() {
   // Variant detection state
   const [showVariantSelector, setShowVariantSelector] = useState(false);
   const [variantType, setVariantType] = useState<"quantity" | "size" | null>(null);
+  const [showAIScanner, setShowAIScanner] = useState(false);
 
   // Queries
   const { data: foodLogs, isLoading, refetch } = trpc.food.getDayLogs.useQuery({
@@ -153,6 +155,35 @@ export function FoodLogger() {
   const handleEditCancel = () => {
     setEditingId(null);
     setEditValues({});
+  };
+
+  const handleAIFoodsRecognized = (foods: Array<{
+    name: string;
+    portionSize: string;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  }>) => {
+    if (foods.length === 0) return;
+    
+    // Use the first recognized food
+    const food = foods[0];
+    setSelectedFood({
+      fdcId: `ai-${Date.now()}`,
+      description: food.name,
+      calories: food.calories,
+      protein: food.protein,
+      carbs: food.carbs,
+      fat: food.fat,
+      servingSize: 100,
+      servingUnit: "g",
+    });
+    setQuantity(food.portionSize);
+    setQuantityUnit("g");
+    setUseManualEntry(false);
+    setShowAIScanner(false);
+    toast.success(`Recognized: ${food.name}`);
   };
 
   const handleBarcodeScanned = async (barcode: string) => {
@@ -483,7 +514,22 @@ export function FoodLogger() {
               Manual Entry
             </Button>
             <BarcodeScanner onBarcodeScanned={handleBarcodeScanned} isLoading={barcodeLoading} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAIScanner(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white border-purple-500"
+            >
+              AI Scanner
+            </Button>
           </div>
+
+          {/* AI Food Scanner Modal */}
+          <AIFoodScanner
+            isOpen={showAIScanner}
+            onClose={() => setShowAIScanner(false)}
+            onFoodsRecognized={handleAIFoodsRecognized}
+          />
 
           {/* Meal Type Selection */}
           <div>

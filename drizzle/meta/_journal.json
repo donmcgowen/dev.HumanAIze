@@ -43,6 +43,13 @@
       "when": 1775841581079,
       "tag": "0005_yellow_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1775939892417,
+      "tag": "0006_easy_layla_miller",
+      "breakpoints": true
     }
   ]
 }
