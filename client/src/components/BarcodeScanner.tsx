@@ -20,19 +20,6 @@ export function BarcodeScanner({ onBarcodeScanned, isLoading = false }: BarcodeS
     if (!isOpen || !containerRef.current) return;
 
     try {
-      // Hide camera selection UI
-      const style = document.createElement("style");
-      style.textContent = `
-        #html5-qrcode-button-camera-permission,
-        #html5-qrcode-select-camera,
-        .html5-qrcode-select-camera,
-        [data-testid="camera-selection"],
-        button[title*="camera"],
-        select {
-          display: none !important;
-        }
-      `;
-      document.head.appendChild(style);
       const scanner = new Html5QrcodeScanner(
         "barcode-scanner-container",
         {
