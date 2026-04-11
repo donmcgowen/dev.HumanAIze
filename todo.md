@@ -333,3 +333,22 @@
 - [x] Implemented meal type selector in food entry form
 - [x] Organized food display by meal sections with individual macros
 - [x] Added daily totals display above meal sections
+
+
+## Feature - Advanced Food Selection with Quantities and Sizes (v1.30 - In Progress)
+
+- [x] Research macro data for fruits by size (small, medium, large)
+- [x] Create food variant system for countable items (eggs, pieces, etc)
+- [x] Research barcode scanning requirements and APIs
+- [x] Implement barcode scanner UI component (BarcodeScanner.tsx)
+- [x] Create barcode lookup module (server/barcode.ts)
+- [x] Integrate barcode scanning with Open Food Facts API
+- [x] Add lookupBarcode endpoint to food router
+- [x] Install html5-qrcode library for barcode scanning
+- [ ] Update FoodLogger component to use BarcodeScanner
+- [ ] Add quantity selector UI for countable foods
+- [ ] Add size selector UI for fruits
+- [ ] Integrate variant detection into FoodLogger
+- [ ] Test quantity selectors with various foods
+- [ ] Test size selectors with fruit macros
+- [ ] Test barcode scanning functionality

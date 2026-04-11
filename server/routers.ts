@@ -25,6 +25,7 @@ import { syncAllSources } from "./dataImport";
 import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, deleteFoodLog, updateFoodLog } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
+import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
@@ -178,6 +179,21 @@ export const appRouter = router({
         })
       )
       .query(({ input }) => searchUSDAFoods(input.query)),
+    lookupBarcode: protectedProcedure
+      .input(
+        z.object({
+          barcode: z.string().regex(/^\d{8,14}$/),
+        })
+      )
+      .query(async ({ input }) => {
+        const product = await lookupBarcodeProduct(input.barcode);
+        if (!product) return null;
+        const variant = getFoodVariant(product.name);
+        return {
+          ...product,
+          variant: variant ? { type: variant.type } : null,
+        };
+      }),
   }),
   sync: router({
     status: protectedProcedure.query(() => getSyncStatus()),
