@@ -517,32 +517,77 @@ export function FoodLogger() {
           <CardDescription>Search USDA database or manually enter food and macros</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Add Food Button */}
-          <div className="flex gap-2">
-            <Button
-              onClick={() => setShowAddFoodModal(true)}
-              className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white"
-              size="lg"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Food
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => setShowFavorites(!showFavorites)}
-              className={showFavorites ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-500" : ""}
-            >
-              Favorites
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => setShowMeals(!showMeals)}
-              className={showMeals ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500" : ""}
-            >
-              Meals
-            </Button>
+          {/* Add Food Button with Meal Type and Amount Controls */}
+          <div className="space-y-3">
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <Button
+                  onClick={() => setShowAddFoodModal(true)}
+                  className="w-full bg-cyan-500 hover:bg-cyan-600 text-white"
+                  size="lg"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Food
+                </Button>
+              </div>
+              <div className="w-32">
+                <Label className="text-xs text-slate-400 mb-1 block">Meal Type</Label>
+                <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
+                  <SelectTrigger className="bg-white/10 border-white/20 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEAL_TYPES.map((meal) => (
+                      <SelectItem key={meal.value} value={meal.value}>
+                        {meal.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-24">
+                <Label className="text-xs text-slate-400 mb-1 block">Amount</Label>
+                <Input
+                  type="number"
+                  placeholder="100"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  className="bg-white/10 border-white/20 h-10 text-sm"
+                  min="1"
+                  step="0.1"
+                />
+              </div>
+              <div className="w-20">
+                <Label className="text-xs text-slate-400 mb-1 block">Unit</Label>
+                <Select value={quantityUnit} onValueChange={(value) => setQuantityUnit(value)}>
+                  <SelectTrigger className="bg-white/10 border-white/20 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grams">g</SelectItem>
+                    <SelectItem value="oz">oz</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFavorites(!showFavorites)}
+                className={showFavorites ? "flex-1 bg-amber-600 hover:bg-amber-700 text-white border-amber-500" : "flex-1"}
+              >
+                Favorites
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowMeals(!showMeals)}
+                className={showMeals ? "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500" : "flex-1"}
+              >
+                Meals
+              </Button>
+            </div>
           </div>
 
           {/* Add Food Modal */}
@@ -603,22 +648,7 @@ export function FoodLogger() {
             </div>
           )}
 
-          {/* Meal Type Selection */}
-          <div>
-            <Label className="text-xs text-slate-400 mb-2 block">Meal Type</Label>
-            <Select value={mealType} onValueChange={(value) => setMealType(value as MealType)}>
-              <SelectTrigger className="bg-white/10 border-white/20">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MEAL_TYPES.map((meal) => (
-                  <SelectItem key={meal.value} value={meal.value}>
-                    {meal.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+
 
           {useManualEntry ? (
             // Manual Entry Form

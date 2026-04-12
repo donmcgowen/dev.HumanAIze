@@ -704,3 +704,14 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Remove ai: undefined property from all query calls
 - [x] Verify app loads without TypeScript errors
 - [x] Verify dashboard displays correctly
+
+
+## Enhancement - Food Logging UI Refactor (v1.53 - COMPLETE)
+
+- [x] Remove the standalone "Meal Type" selection card from FoodLogger
+- [x] Add meal type dropdown next to "Add Food" button
+- [x] Add amount input field with grams/ounces unit selector
+- [x] Integrate amount controls into the Add Food button area
+- [x] Test meal type selection works correctly
+- [x] Test amount input with unit conversion
+- [x] Verify food is logged with correct meal type and amount
