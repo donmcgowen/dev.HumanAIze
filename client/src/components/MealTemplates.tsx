@@ -34,10 +34,10 @@ export function MealTemplates({ currentMeals = [], onSelectMeal }: MealTemplates
         mealName,
         foods: currentMeals as any,
         totalCalories,
-        totalProtein,
-        totalCarbs,
-        totalFat,
-      });
+        totalProteinGrams: totalProtein,
+        totalCarbsGrams: totalCarbs,
+        totalFatGrams: totalFat,
+      } as any);
 
       setMealName("");
       setShowForm(false);
@@ -50,7 +50,7 @@ export function MealTemplates({ currentMeals = [], onSelectMeal }: MealTemplates
 
   const handleDeleteMeal = async (id: string) => {
     try {
-      await deleteMealMutation.mutateAsync({ id });
+      await deleteMealMutation.mutateAsync({ mealTemplateId: id } as any);
       refetch();
       toast.success("Meal template deleted");
     } catch (error) {

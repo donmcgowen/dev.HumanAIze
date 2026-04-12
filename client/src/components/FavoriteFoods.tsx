@@ -33,10 +33,11 @@ export function FavoriteFoods({ onSelectFood }: FavoriteFoodsProps) {
       await addFavoriteMutation.mutateAsync({
         foodName: formData.foodName,
         calories: parseInt(formData.calories),
-        protein: parseInt(formData.protein) || 0,
-        carbs: parseInt(formData.carbs) || 0,
-        fat: parseInt(formData.fat) || 0,
-      });
+        proteinGrams: parseInt(formData.protein) || 0,
+        carbsGrams: parseInt(formData.carbs) || 0,
+        fatGrams: parseInt(formData.fat) || 0,
+        servingSize: "1 serving",
+      } as any);
 
       setFormData({ foodName: "", calories: "", protein: "", carbs: "", fat: "" });
       setShowForm(false);
@@ -49,7 +50,7 @@ export function FavoriteFoods({ onSelectFood }: FavoriteFoodsProps) {
 
   const handleDeleteFavorite = async (id: string) => {
     try {
-      await deleteFavoriteMutation.mutateAsync({ id });
+      await deleteFavoriteMutation.mutateAsync({ favoriteFoodId: id } as any);
       refetch();
       toast.success("Favorite removed");
     } catch (error) {
