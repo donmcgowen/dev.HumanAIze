@@ -18,13 +18,17 @@ import { AddFoodModal } from "./AddFoodModal";
 
 interface USDAFoodResult {
   fdcId: string;
-  description: string;
+  description?: string;
+  foodName?: string;
   calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  servingSize: number;
-  servingUnit: string;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  proteinGrams?: number;
+  carbsGrams?: number;
+  fatGrams?: number;
+  servingSize: number | string;
+  servingUnit?: string;
 }
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -178,13 +182,14 @@ export function FoodLogger() {
     
     // Use the first recognized food
     const food = foods[0];
+    const f = food as any;
     setSelectedFood({
       fdcId: `ai-${Date.now()}`,
       description: food.name,
       calories: food.calories,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
+      proteinGrams: f.proteinGrams || food.protein || 0,
+      carbsGrams: f.carbsGrams || food.carbs || 0,
+      fatGrams: f.fatGrams || food.fat || 0,
       servingSize: 100,
       servingUnit: "g",
     });
@@ -200,13 +205,14 @@ export function FoodLogger() {
     try {
       const product = await trpc.useUtils().food.lookupBarcode.fetch({ barcode });
       if (product) {
+        const p = product as any;
         setSelectedFood({
           fdcId: barcode,
           description: product.name,
           calories: product.calories,
-          protein: product.protein,
-          carbs: product.carbs,
-          fat: product.fat,
+          proteinGrams: p.proteinGrams || product.protein || 0,
+          carbsGrams: p.carbsGrams || product.carbs || 0,
+          fatGrams: p.fatGrams || product.fat || 0,
           servingSize: parseInt(product.servingSize),
           servingUnit: product.servingUnit,
         });
@@ -255,11 +261,12 @@ export function FoodLogger() {
 
     if (selectedFood && quantity) {
       const quantityInGrams = getQuantityInGrams();
-      const scale = quantityInGrams / selectedFood.servingSize;
+      const servingSize = typeof selectedFood.servingSize === 'string' ? 100 : selectedFood.servingSize;
+      const scale = quantityInGrams / servingSize;
       return {
-        protein: selectedFood.protein * scale,
-        carbs: selectedFood.carbs * scale,
-        fat: selectedFood.fat * scale,
+        protein: (selectedFood.proteinGrams || selectedFood.protein || 0) * scale,
+        carbs: (selectedFood.carbsGrams || selectedFood.carbs || 0) * scale,
+        fat: (selectedFood.fatGrams || selectedFood.fat || 0) * scale,
         calories: selectedFood.calories * scale,
       };
     }
@@ -359,7 +366,7 @@ export function FoodLogger() {
         return;
       }
       addFoodLog.mutate({
-        foodName: selectedFood.description,
+        foodName: selectedFood.description || selectedFood.foodName || "Unknown Food",
         servingSize: `${quantity}${quantityUnit}`,
         calories: Math.round(calculatedMacros.calories),
         proteinGrams: Math.round(calculatedMacros.protein * 10) / 10,
@@ -562,10 +569,11 @@ export function FoodLogger() {
                   setSelectedFood({
                     fdcId: food.id,
                     description: food.foodName,
+                    foodName: food.foodName,
                     calories: food.calories,
-                    protein: food.protein,
-                    carbs: food.carbs,
-                    fat: food.fat,
+                    proteinGrams: food.proteinGrams,
+                    carbsGrams: food.carbsGrams,
+                    fatGrams: food.fatGrams,
                     servingSize: 1,
                     servingUnit: "serving",
                   });
@@ -705,7 +713,7 @@ export function FoodLogger() {
                         >
                           <div className="font-medium text-white">{food.description}</div>
                           <div className="text-xs text-slate-500">
-                            {food.protein.toFixed(1)}g protein • {food.carbs.toFixed(1)}g carbs • {food.fat.toFixed(1)}g fat • {food.calories} cal per {food.servingSize}{food.servingUnit}
+                            {food.proteinGrams.toFixed(1)}g protein • {food.carbsGrams.toFixed(1)}g carbs • {food.fatGrams.toFixed(1)}g fat • {food.calories} cal per {food.servingSize}{food.servingUnit}
                           </div>
                         </button>
                       ))

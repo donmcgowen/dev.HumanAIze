@@ -32,6 +32,7 @@ import { parseClarityCSV, validateClarityCSV, calculateReadingStats, type Glucos
 import { recognizeFoodFromPhoto, recognizeFoodFromVoice, recognizeFoodFromPhotoAndVoice } from "./foodRecognition";
 import { storagePut } from "./storage";
 import { analyzeMealWithAI, type MealData, type DailyTargets } from "./mealAnalysis";
+import { searchFoodWithGemini, calculateMacrosForServing } from "./geminiFood";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
@@ -461,6 +462,34 @@ export const appRouter = router({
           input.category,
           input.limit
         );
+      }),
+    searchWithAI: publicProcedure
+      .input(z.object({ query: z.string().min(1) }))
+      .query(async ({ input }) => {
+        return await searchFoodWithGemini(input.query);
+      }),
+    calculateServingMacros: publicProcedure
+      .input(
+        z.object({
+          foodName: z.string(),
+          caloriesPer100g: z.number().positive(),
+          proteinPer100g: z.number().nonnegative(),
+          carbsPer100g: z.number().nonnegative(),
+          fatPer100g: z.number().nonnegative(),
+          amount: z.number().positive(),
+          unit: z.enum(["g", "oz"]),
+        })
+      )
+      .query(({ input }) => {
+        const food = {
+          name: input.foodName,
+          description: "",
+          caloriesPer100g: input.caloriesPer100g,
+          proteinPer100g: input.proteinPer100g,
+          carbsPer100g: input.carbsPer100g,
+          fatPer100g: input.fatPer100g,
+        };
+        return calculateMacrosForServing(food, input.amount, input.unit);
       }),
   }),
   sync: router({

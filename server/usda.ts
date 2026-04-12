@@ -9,14 +9,15 @@ const USDA_API_KEY = process.env.USDA_API_KEY || "DEMO_KEY";
 
 export interface USDAFoodResult {
   fdcId: string;
-  description: string;
+  foodName: string;
+  description?: string;
   dataType: string;
   calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  servingSize: number;
-  servingUnit: string;
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+  servingSize: string;
+  servingUnit?: string;
 }
 
 /**
@@ -69,13 +70,14 @@ export async function searchUSDAFoods(query: string): Promise<USDAFoodResult[]> 
 
       return {
         fdcId: food.fdcId,
+        foodName: food.description || "Unknown Food",
         description: food.description || "",
         dataType: food.dataType || "Survey (FNDDS)",
         calories: Math.round(getnutrient(1008)),
-        protein: Math.round(getnutrient(1003) * 10) / 10,
-        carbs: Math.round(getnutrient(1005) * 10) / 10,
-        fat: Math.round(getnutrient(1004) * 10) / 10,
-        servingSize: 100, // USDA data is typically per 100g
+        proteinGrams: Math.round(getnutrient(1003) * 10) / 10,
+        carbsGrams: Math.round(getnutrient(1005) * 10) / 10,
+        fatGrams: Math.round(getnutrient(1004) * 10) / 10,
+        servingSize: "100g",
         servingUnit: "g",
       };
     });
@@ -111,13 +113,14 @@ export async function getUSDAFoodDetails(fdcId: string): Promise<USDAFoodResult 
 
     return {
       fdcId: food.fdcId,
+      foodName: food.description || "Unknown Food",
       description: food.description || "",
       dataType: food.dataType || "Survey (FNDDS)",
       calories: Math.round(getnutrient(1008)),
-      protein: Math.round(getnutrient(1003) * 10) / 10,
-      carbs: Math.round(getnutrient(1005) * 10) / 10,
-      fat: Math.round(getnutrient(1004) * 10) / 10,
-      servingSize: 100,
+      proteinGrams: Math.round(getnutrient(1003) * 10) / 10,
+      carbsGrams: Math.round(getnutrient(1005) * 10) / 10,
+      fatGrams: Math.round(getnutrient(1004) * 10) / 10,
+      servingSize: "100g",
       servingUnit: "g",
     };
   } catch (error) {

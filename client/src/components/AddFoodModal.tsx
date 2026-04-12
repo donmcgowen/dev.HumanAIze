@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Search, FileText, Barcode, Loader2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { skipToken } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 
 interface AddFoodModalProps {
@@ -75,27 +76,44 @@ interface SearchFoodTabProps {
 function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFood, setSelectedFood] = useState<any>(null);
-  const [servingSize, setServingSize] = useState("");
+  const [servingAmount, setServingAmount] = useState("100");
+  const [servingUnit, setServingUnit] = useState<"g" | "oz">("g");
 
-  const { data: searchResults, isLoading } = trpc.food.searchUSDA.useQuery(
+  const { data: foodVariations, isLoading } = trpc.food.searchWithAI.useQuery(
     { query: searchQuery },
     { enabled: searchQuery.length > 2 }
   );
 
+  const { data: calculatedMacros } = trpc.food.calculateServingMacros.useQuery(
+    selectedFood && servingAmount
+      ? {
+          foodName: selectedFood.name,
+          caloriesPer100g: selectedFood.caloriesPer100g,
+          proteinPer100g: selectedFood.proteinPer100g,
+          carbsPer100g: selectedFood.carbsPer100g,
+          fatPer100g: selectedFood.fatPer100g,
+          amount: parseFloat(servingAmount) || 0,
+          unit: servingUnit,
+        }
+      : skipToken,
+    { enabled: !!selectedFood && !!servingAmount }
+  );
+
   const handleSelectFood = (food: any) => {
     setSelectedFood(food);
-    setServingSize(food.servingSize || "1 serving");
+    setServingAmount("100");
+    setServingUnit("g");
   };
 
   const handleAddFood = () => {
-    if (selectedFood) {
+    if (selectedFood && calculatedMacros) {
       onFoodAdded({
-        foodName: selectedFood.foodName,
-        servingSize,
-        calories: selectedFood.calories,
-        proteinGrams: selectedFood.proteinGrams,
-        carbsGrams: selectedFood.carbsGrams,
-        fatGrams: selectedFood.fatGrams,
+        foodName: selectedFood.name,
+        servingSize: `${servingAmount}${servingUnit}`,
+        calories: calculatedMacros.calories,
+        proteinGrams: calculatedMacros.protein,
+        carbsGrams: calculatedMacros.carbs,
+        fatGrams: calculatedMacros.fat,
       });
       onClose();
     }
@@ -104,44 +122,40 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="search-food">Search USDA Database</Label>
+        <Label htmlFor="search-food">Search Foods with AI</Label>
         <Input
           id="search-food"
-          placeholder="e.g., chicken breast, brown rice, broccoli..."
+          placeholder="e.g., chicken, pasta, salmon, broccoli..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full"
         />
-        <p className="text-xs text-gray-500">Start typing to search for foods</p>
+        <p className="text-xs text-gray-500">Start typing to find top 10 food variations</p>
       </div>
 
       {isLoading && (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin mr-2" />
-          <span className="text-sm text-gray-600">Searching...</span>
+          <span className="text-sm text-gray-600">Finding foods...</span>
         </div>
       )}
 
-      {searchResults && searchResults.length > 0 && (
+      {foodVariations && foodVariations.length > 0 && !selectedFood && (
         <div className="space-y-2 max-h-64 overflow-y-auto">
-          {searchResults.map((food: any, idx: number) => (
+          {foodVariations.map((food: any, idx: number) => (
             <Card
               key={idx}
-              className={`p-3 cursor-pointer transition-colors ${
-                selectedFood?.foodName === food.foodName
-                  ? "bg-blue-50 border-blue-300"
-                  : "hover:bg-gray-50"
-              }`}
+              className="p-3 cursor-pointer transition-colors hover:bg-blue-50/50 border-gray-700 hover:border-blue-400"
               onClick={() => handleSelectFood(food)}
             >
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium text-sm">{food.foodName}</p>
-                  <p className="text-xs text-gray-500">{food.servingSize}</p>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{food.name}</p>
+                  <p className="text-xs text-gray-400">{food.description}</p>
                 </div>
-                <div className="text-right text-xs">
-                  <p className="font-semibold">{food.calories} cal</p>
-                  <p className="text-gray-600">{food.proteinGrams}g P</p>
+                <div className="text-right text-xs ml-2">
+                  <p className="font-semibold">{Math.round(food.caloriesPer100g)} cal/100g</p>
+                  <p className="text-gray-400">{food.proteinPer100g}g P</p>
                 </div>
               </div>
             </Card>
@@ -150,43 +164,83 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
       )}
 
       {selectedFood && (
-        <div className="border-t pt-4 space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="serving-size">Serving Size</Label>
-            <Input
-              id="serving-size"
-              value={servingSize}
-              onChange={(e) => setServingSize(e.target.value)}
-              placeholder="e.g., 100g, 1 cup, 1 breast"
-            />
+        <div className="space-y-4 p-4 bg-blue-50/10 border border-blue-500/20 rounded-lg">
+          <div>
+            <h4 className="font-semibold text-sm mb-1">{selectedFood.name}</h4>
+            <p className="text-xs text-gray-400">{selectedFood.description}</p>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-center text-sm">
-            <div className="bg-blue-50 p-2 rounded">
-              <p className="text-xs text-gray-600">Calories</p>
-              <p className="font-semibold">{selectedFood.calories}</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="serving-amount" className="text-xs">Amount</Label>
+              <Input
+                id="serving-amount"
+                type="number"
+                placeholder="100"
+                value={servingAmount}
+                onChange={(e) => setServingAmount(e.target.value)}
+                min="1"
+                step="0.1"
+                className="text-sm"
+              />
             </div>
-            <div className="bg-red-50 p-2 rounded">
-              <p className="text-xs text-gray-600">Protein</p>
-              <p className="font-semibold">{selectedFood.proteinGrams}g</p>
+            <div className="space-y-1">
+              <Label htmlFor="serving-unit" className="text-xs">Unit</Label>
+              <select
+                id="serving-unit"
+                value={servingUnit}
+                onChange={(e) => setServingUnit(e.target.value as "g" | "oz")}
+                className="w-full px-2 py-1 text-sm border border-gray-600 rounded bg-gray-800 text-white"
+              >
+                <option value="g">Grams (g)</option>
+                <option value="oz">Ounces (oz)</option>
+              </select>
             </div>
-            <div className="bg-yellow-50 p-2 rounded">
-              <p className="text-xs text-gray-600">Carbs</p>
-              <p className="font-semibold">{selectedFood.carbsGrams}g</p>
-            </div>
-            <div className="bg-orange-50 p-2 rounded">
-              <p className="text-xs text-gray-600">Fat</p>
-              <p className="font-semibold">{selectedFood.fatGrams}g</p>
+            <div className="space-y-1">
+              <Label className="text-xs">Calories</Label>
+              <div className="px-2 py-1 text-sm font-semibold bg-gray-800 rounded">
+                {calculatedMacros?.calories || 0}
+              </div>
             </div>
           </div>
 
-          <Button onClick={handleAddFood} className="w-full">
-            Add to {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
-          </Button>
+          {calculatedMacros && (
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="p-2 bg-gray-800 rounded">
+                <p className="text-gray-400">Protein</p>
+                <p className="font-semibold">{calculatedMacros.protein}g</p>
+              </div>
+              <div className="p-2 bg-gray-800 rounded">
+                <p className="text-gray-400">Carbs</p>
+                <p className="font-semibold">{calculatedMacros.carbs}g</p>
+              </div>
+              <div className="p-2 bg-gray-800 rounded">
+                <p className="text-gray-400">Fat</p>
+                <p className="font-semibold">{calculatedMacros.fat}g</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setSelectedFood(null)}
+              variant="outline"
+              className="flex-1 text-sm"
+            >
+              Back
+            </Button>
+            <Button
+              onClick={handleAddFood}
+              disabled={!calculatedMacros}
+              className="flex-1 text-sm"
+            >
+              Add to {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+            </Button>
+          </div>
         </div>
       )}
 
-      {searchQuery.length > 2 && searchResults && searchResults.length === 0 && !isLoading && (
+      {!isLoading && !selectedFood && searchQuery.length > 2 && (!foodVariations || foodVariations.length === 0) && (
         <div className="text-center py-8">
           <p className="text-sm text-gray-500">No foods found. Try a different search term.</p>
         </div>
@@ -194,6 +248,7 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
     </div>
   );
 }
+
 
 interface ManualEntryTabProps {
   onFoodAdded: (food: any) => void;
@@ -308,18 +363,27 @@ function ManualEntryTab({ onFoodAdded, onClose, mealType = "meal" }: ManualEntry
 
 function AIScannerTab() {
   return (
-    <div className="space-y-4 text-center py-8">
-      <Barcode className="h-12 w-12 mx-auto text-gray-400" />
-      <div>
-        <h4 className="font-medium text-sm mb-1">AI Barcode Scanner</h4>
-        <p className="text-xs text-gray-500 mb-4">
+    <div className="space-y-6 text-center py-12">
+      <div className="flex justify-center">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
+          <Barcode className="h-16 w-16 mx-auto text-blue-400 relative" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <h4 className="font-semibold text-lg">AI Barcode Scanner</h4>
+        <p className="text-sm text-gray-400 max-w-xs mx-auto">
           Point your camera at a food barcode to automatically scan and populate nutrition information.
         </p>
       </div>
-      <Button disabled className="w-full">
-        Coming Soon
+      <div className="bg-gradient-to-r from-blue-900/20 to-cyan-900/20 rounded-lg p-4 border border-blue-500/20">
+        <p className="text-xs text-gray-300 mb-3">✨ Coming Soon</p>
+        <p className="text-xs text-gray-400">This feature is currently in development and will be available in the next release.</p>
+      </div>
+      <Button disabled className="w-full bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30">
+        <Barcode className="h-4 w-4 mr-2" />
+        Enable Camera Scanner
       </Button>
-      <p className="text-xs text-gray-400">This feature is currently in development</p>
     </div>
   );
 }

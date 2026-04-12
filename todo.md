@@ -665,3 +665,32 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Replace with single "Add Food" button that opens modal - single button working
 - [x] Test all three options work correctly - all tested and working
 - [x] Verify food data is correctly added to daily totals - integration ready
+
+
+## Bug Report - Food Search Not Displaying Food Names (v1.50)
+
+- [ ] Fix SearchFoodTab to display food names in search results
+- [ ] Show serving size for each food result
+- [ ] Display macro breakdown (calories, protein, carbs, fat) for each result
+- [ ] Make results clickable to select food
+- [ ] Test search with various food queries
+- [ ] Verify selected food is properly added to meal
+
+## Enhancement - Barcode Icon for AI Scanner Tab (v1.51)
+
+- [ ] Add barcode scanning icon to AI Scanner tab
+- [ ] Improve visual design with better spacing and layout
+- [ ] Add hover effects and visual feedback
+- [ ] Test icon displays correctly on all screen sizes
+
+## Enhancement - AI-Powered Food Search with Gemini (v1.52 - COMPLETE)
+
+- [x] Create Gemini AI food search utility to generate top 10 food variations
+- [x] Add tRPC procedure for AI-powered food search (food.searchWithAI)
+- [x] Add tRPC procedure for macro calculation (food.calculateServingMacros)
+- [x] Update SearchFoodTab to display food variations with descriptions
+- [x] Add serving size input with unit selector (grams, ounces)
+- [x] Implement macro calculation based on serving amount
+- [x] Test with various food queries (pasta, chicken, beef, vegetables)
+- [x] Verify macro calculations are accurate for different serving sizes
+- [x] Write and pass 11 unit tests for food search and macro calculation

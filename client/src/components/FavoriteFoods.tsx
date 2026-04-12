@@ -6,7 +6,7 @@ import { Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 interface FavoriteFoodsProps {
-  onSelectFood?: (food: { id: string; foodName: string; calories: number; protein: number; carbs: number; fat: number }) => void;
+  onSelectFood?: (food: { id: string; foodName: string; calories: number; proteinGrams: number; carbsGrams: number; fatGrams: number }) => void;
 }
 
 export function FavoriteFoods({ onSelectFood }: FavoriteFoodsProps) {
@@ -129,7 +129,7 @@ export function FavoriteFoods({ onSelectFood }: FavoriteFoodsProps) {
               <div className="flex-1">
                 <p className="font-medium">{food.foodName}</p>
                 <p className="text-sm text-slate-400">
-                  {food.calories} cal | P: {food.protein}g | C: {food.carbs}g | F: {food.fat}g
+                  {food.calories} cal | P: {food.proteinGrams}g | C: {food.carbsGrams}g | F: {food.fatGrams}g
                 </p>
               </div>
               <button
