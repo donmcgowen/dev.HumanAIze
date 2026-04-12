@@ -565,3 +565,13 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Fix TypeScript errors in components
 - [x] Test components compile and render
 - [x] Verify buttons appear in Food Logging page
+
+
+## Bug Report - AI Recommendations Not Displaying (v1.43 - COMPLETE)
+
+- [x] Find Real-Time Insights component showing macro progress
+- [x] Check if AI meal analysis endpoint is being called
+- [x] Verify recommendations are being fetched from backend
+- [x] Fix recommendations display logic - enabled insights query even without profile
+- [x] Test with logged food data
+- [x] Verify AI insights show personalized recommendations - working with Gemini AI

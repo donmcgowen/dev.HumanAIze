@@ -71,7 +71,10 @@ export function FoodLogger() {
     { enabled: searchQuery.length > 2 && !useManualEntry }
   );
 
-  // Insights query
+  // Fetch user profile for daily goals
+  const { data: userProfile } = trpc.profile.get.useQuery();
+
+  // Insights query - enable even without profile to show recommendations with default targets
   const { data: insights, isLoading: insightsLoading } = trpc.food.generateInsights.useQuery(
     {
       foodLogs: (foodLogs || []).map(log => ({
@@ -82,10 +85,10 @@ export function FoodLogger() {
         fatGrams: log.fatGrams,
         mealType: log.mealType as "breakfast" | "lunch" | "dinner" | "snack",
       })),
-      dailyCalorieGoal: 2000,
-      dailyProteinGoal: 150,
-      dailyCarbGoal: 200,
-      dailyFatGoal: 65,
+      dailyCalorieGoal: userProfile?.dailyCalorieTarget || 2000,
+      dailyProteinGoal: userProfile?.dailyProteinTarget || 150,
+      dailyCarbGoal: userProfile?.dailyCarbsTarget || 200,
+      dailyFatGoal: userProfile?.dailyFatTarget || 65,
       healthObjectives: ["balanced nutrition"],
     },
     { enabled: (foodLogs?.length || 0) > 0 }

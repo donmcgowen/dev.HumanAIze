@@ -135,7 +135,7 @@ export function FavoriteFoods({ onSelectFood }: FavoriteFoodsProps) {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteFavorite(food.favoriteFoodId.toString());
+                  handleDeleteFavorite(food.id.toString());
                 }}
                 className="text-red-400 hover:text-red-300"
               >
