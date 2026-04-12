@@ -95,6 +95,9 @@ export function FoodLogger() {
   // Fetch user profile for daily goals
   const { data: userProfile } = trpc.profile.get.useQuery();
 
+  // Fetch recently added foods
+  const { data: recentFoods } = trpc.food.getRecent.useQuery({ limit: 5 });
+
   // Insights query - enable even without profile to show recommendations with default targets
   const { data: insights, isLoading: insightsLoading } = trpc.food.generateInsights.useQuery(
     {
@@ -581,6 +584,38 @@ export function FoodLogger() {
                 onClick={() => setShowMeals(!showMeals)}
                 className={showMeals ? "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500" : "flex-1"}
               >
+            {/* Recently Added Foods Section */}
+            {recentFoods && recentFoods.length > 0 && (
+              <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+                <h3 className="text-sm font-semibold mb-3 text-slate-300">Recently Added</h3>
+                <div className="space-y-2">
+                  {recentFoods.map((food: any) => (
+                    <div
+                      key={food.id}
+                      className="flex items-center justify-between p-2 bg-slate-700/50 rounded hover:bg-slate-700 cursor-pointer transition"
+                      onClick={() => {
+                        addFoodLog.mutate({
+                          foodName: food.foodName,
+                          servingSize: food.servingSize || "1 serving",
+                          calories: food.calories,
+                          proteinGrams: food.proteinGrams,
+                          carbsGrams: food.carbsGrams,
+                          fatGrams: food.fatGrams,
+                          mealType,
+                          loggedAt: Date.now(),
+                        });
+                        toast.success(`Added ${food.foodName} to ${mealType}`);
+                      }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{food.foodName}</p>
+                        <p className="text-xs text-slate-400">{food.calories} cal</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
                 Meals
               </Button>
             </div>
@@ -753,7 +788,7 @@ export function FoodLogger() {
         <CardHeader>
           <CardTitle>Daily Totals</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-4 gap-3">
             <div className="bg-white/5 p-3 rounded">
               <div className="text-xs text-slate-400">Protein</div>
@@ -772,6 +807,39 @@ export function FoodLogger() {
               <div className="text-lg font-bold text-white">{dailyTotals.calories.toFixed(0)}</div>
             </div>
           </div>
+          
+          {/* Calorie Goal Progress Bar */}
+          {userProfile?.dailyCalorieTarget && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium text-slate-300">Calorie Goal</span>
+                <span className="text-sm text-slate-400">
+                  {dailyTotals.calories.toFixed(0)} / {userProfile.dailyCalorieTarget} kcal
+                </span>
+              </div>
+              {(() => {
+                const percentage = (dailyTotals.calories / userProfile.dailyCalorieTarget) * 100;
+                let barColor = "bg-emerald-500";
+                if (percentage >= 100) barColor = "bg-red-500";
+                else if (percentage >= 90) barColor = "bg-amber-500";
+                else if (percentage >= 75) barColor = "bg-yellow-500";
+                
+                return (
+                  <>
+                    <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full ${barColor} transition-all duration-300`}
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-slate-400 text-center">
+                      {percentage.toFixed(0)}% • {(userProfile.dailyCalorieTarget - dailyTotals.calories).toFixed(0)} kcal remaining
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
         </CardContent>
       </Card>
 

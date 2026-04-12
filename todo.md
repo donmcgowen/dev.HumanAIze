@@ -729,24 +729,24 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Write and pass 7 unit tests for macro calculations
 
 
-## Enhancement - Recently Added Foods Quick Access (v1.54)
+## Enhancement - Recently Added Foods Quick Access (v1.54 - COMPLETE)
 
-- [ ] Query recently added foods from database (last 5 foods)
-- [ ] Display Recently Added section below Add Food, Favorites, Meals buttons
-- [ ] Show food name, calories, and date added for each recent food
-- [ ] Allow quick re-add of recent foods with one click
-- [ ] Test with multiple recently added foods
-- [ ] Verify quick re-add functionality works correctly
+- [x] Query recently added foods from database (last 5 foods)
+- [x] Display Recently Added section below Add Food, Favorites, Meals buttons
+- [x] Show food name, calories, and date added for each recent food
+- [x] Allow quick re-add of recent foods with one click
+- [x] Test with multiple recently added foods
+- [x] Verify quick re-add functionality works correctly
 
-## Enhancement - Calorie Goal Progress Bar (v1.55)
+## Enhancement - Calorie Goal Progress Bar (v1.55 - COMPLETE)
 
-- [ ] Add calorie goal field to user profile (default: 2000 kcal)
-- [ ] Calculate remaining calories for the day in Daily Totals
-- [ ] Display visual progress bar showing calories consumed vs goal
-- [ ] Show percentage and remaining calories text
-- [ ] Color code progress bar (green when under goal, yellow when near, red when over)
-- [ ] Test with various calorie intake levels
-- [ ] Verify progress bar updates in real-time as foods are added
+- [x] Add calorie goal field to user profile (default: 2000 kcal)
+- [x] Calculate remaining calories for the day in Daily Totals
+- [x] Display visual progress bar showing calories consumed vs goal
+- [x] Show percentage and remaining calories text
+- [x] Color code progress bar (green when under goal, yellow when near, red when over)
+- [x] Test with various calorie intake levels
+- [x] Verify progress bar updates in real-time as foods are added
 
 
 ## Enhancement - Star Icon to Favorite Foods (v1.56 - COMPLETE)
