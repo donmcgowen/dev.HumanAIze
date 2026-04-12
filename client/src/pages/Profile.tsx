@@ -17,9 +17,9 @@ export function Profile() {
   const updateProfile = trpc.profile.upsert.useMutation();
 
   const [formData, setFormData] = useState({
-    heightCm: "",
-    weightKg: "",
-    ageYears: "",
+    heightCm: "0",
+    weightKg: "0",
+    ageYears: "0",
     fitnessGoal: "",
   });
 
@@ -48,13 +48,13 @@ export function Profile() {
 
   const displayWeight = () => {
     const kg = parseFloat(formData.weightKg);
-    if (!kg || kg <= 0) return "";
+    if (isNaN(kg) || kg <= 0) return "0";
     return convertWeight(kg, weightUnit).toString();
   };
 
   const displayHeight = () => {
     const cm = parseFloat(formData.heightCm);
-    if (!cm || cm <= 0) return "";
+    if (isNaN(cm) || cm <= 0) return "0";
     return convertHeight(cm, heightUnit).toString();
   };
 
@@ -62,19 +62,16 @@ export function Profile() {
   useEffect(() => {
     if (profile) {
       setFormData({
-        heightCm: profile.heightCm?.toString() || "",
-        weightKg: profile.weightKg?.toString() || "",
-        ageYears: profile.ageYears?.toString() || "",
+        heightCm: profile.heightCm ? profile.heightCm.toString() : "0",
+        weightKg: profile.weightKg ? profile.weightKg.toString() : "0",
+        ageYears: profile.ageYears ? profile.ageYears.toString() : "0",
         fitnessGoal: profile.fitnessGoal || "",
       });
-      // Load persisted daily targets
-      setDailyCalorieTarget(profile.dailyCalorieTarget?.toString() || "");
-      setDailyProteinTarget(profile.dailyProteinTarget?.toString() || "");
-      setDailyCarbsTarget(profile.dailyCarbsTarget?.toString() || "");
-      setDailyFatTarget(profile.dailyFatTarget?.toString() || "");
-      // Activity level will be added after database migration
-      // Load goal data
-      setGoalWeightKg(profile.goalWeightKg?.toString() || "");
+      setDailyCalorieTarget(profile.dailyCalorieTarget ? profile.dailyCalorieTarget.toString() : "0");
+      setDailyProteinTarget(profile.dailyProteinTarget ? profile.dailyProteinTarget.toString() : "0");
+      setDailyCarbsTarget(profile.dailyCarbsTarget ? profile.dailyCarbsTarget.toString() : "0");
+      setDailyFatTarget(profile.dailyFatTarget ? profile.dailyFatTarget.toString() : "0");
+      setGoalWeightKg(profile.goalWeightKg ? profile.goalWeightKg.toString() : "");
       if (profile.goalDate) {
         const date = new Date(profile.goalDate);
         setGoalDate(date.toISOString().split('T')[0]);
@@ -167,17 +164,16 @@ export function Profile() {
       }
 
       await updateProfile.mutateAsync({
-        heightCm: heightCmValue,
-        weightKg: weightKgValue,
-        ageYears: formData.ageYears ? parseInt(formData.ageYears) : undefined,
+        heightCm: heightCmValue && heightCmValue > 0 ? heightCmValue : undefined,
+        weightKg: weightKgValue && weightKgValue > 0 ? weightKgValue : undefined,
+        ageYears: formData.ageYears && parseInt(formData.ageYears) > 0 ? parseInt(formData.ageYears) : undefined,
         fitnessGoal: (formData.fitnessGoal as "lose_fat" | "build_muscle" | "maintain") || undefined,
-        // activityLevel will be added after database migration
-        goalWeightKg: goalWeightValue,
+        goalWeightKg: goalWeightValue && goalWeightValue > 0 ? goalWeightValue : undefined,
         goalDate: goalDateTimestamp,
-        dailyCalorieTarget: dailyCalorieTarget ? parseInt(dailyCalorieTarget) : undefined,
-        dailyProteinTarget: dailyProteinTarget ? parseInt(dailyProteinTarget) : undefined,
-        dailyCarbsTarget: dailyCarbsTarget ? parseInt(dailyCarbsTarget) : undefined,
-        dailyFatTarget: dailyFatTarget ? parseInt(dailyFatTarget) : undefined,
+        dailyCalorieTarget: dailyCalorieTarget && parseInt(dailyCalorieTarget) > 0 ? parseInt(dailyCalorieTarget) : undefined,
+        dailyProteinTarget: dailyProteinTarget && parseInt(dailyProteinTarget) > 0 ? parseInt(dailyProteinTarget) : undefined,
+        dailyCarbsTarget: dailyCarbsTarget && parseInt(dailyCarbsTarget) > 0 ? parseInt(dailyCarbsTarget) : undefined,
+        dailyFatTarget: dailyFatTarget && parseInt(dailyFatTarget) > 0 ? parseInt(dailyFatTarget) : undefined,
       });
 
       toast.success("Profile updated successfully");
