@@ -781,21 +781,6 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Users can access recent foods through Favorites instead
 
 
-## Enhancement - Progress Photos Section (v1.59)
-
-- [ ] Create progressPhotos table in database schema
-- [ ] Add photo storage and retrieval functions in db.ts
-- [ ] Create tRPC procedures for photo upload, retrieval, and deletion
-- [ ] Build ProgressPhotos component with camera capture UI
-- [ ] Implement camera access with getUserMedia API
-- [ ] Add photo upload from existing files
-- [ ] Add name and date fields for each photo
-- [ ] Display progress photos gallery in Profile page
-- [ ] Add delete functionality for photos
-- [ ] Test camera capture on mobile and desktop
-- [ ] Test photo upload and storage
-
-
 ## Enhancement - Progress Photos Section in Profile (v1.59 - COMPLETE)
 
 - [x] Create progressPhotos table in database schema
