@@ -540,19 +540,19 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Verified with 185.42cm, 85kg = 24.7 BMI (Normal weight)
 
 
-## Feature - Fitness Goal Calorie & Macro Targets (v1.41)
+## Feature - Fitness Goal Calorie & Macro Targets (v1.41 - COMPLETE)
 
-- [ ] Update Profile schema to add goalWeight, goalDate, dailyCalorieTarget, dailyProteinTarget, dailyCarbs Target, dailyFatTarget
-- [ ] Create TDEE (Total Daily Energy Expenditure) calculation function using Mifflin-St Jeor formula
-- [ ] Create macro calculation function based on goal type (lose_fat, build_muscle, maintain)
-- [ ] Add goal weight input to Profile UI
-- [ ] Add goal date input to Profile UI (date picker)
-- [ ] Display calculated daily calorie target
-- [ ] Display calculated daily macro targets (protein, carbs, fat)
-- [ ] Show progress towards goal (current weight vs goal weight)
-- [ ] Calculate weekly weight loss/gain needed to reach goal by target date
-- [ ] Test calculations with different profile data
-- [ ] Verify macros align with fitness goals (high protein for muscle, calorie deficit for fat loss)
+- [x] Update Profile schema to add goalWeight, goalDate, dailyCalorieTarget, dailyProteinTarget, dailyCarbs Target, dailyFatTarget
+- [x] Create TDEE (Total Daily Energy Expenditure) calculation function using Mifflin-St Jeor formula
+- [x] Create macro calculation function based on goal type (lose_fat, build_muscle, maintain)
+- [x] Add goal weight input to Profile UI
+- [x] Add goal date input to Profile UI (date picker)
+- [x] Display calculated daily calorie target
+- [x] Display calculated daily macro targets (protein, carbs, fat)
+- [x] Show progress towards goal (current weight vs goal weight)
+- [x] Calculate weekly weight loss/gain needed to reach goal by target date
+- [x] Test calculations with different profile data
+- [x] Verify macros align with fitness goals (high protein for muscle, calorie deficit for fat loss)
 
 
 ## Feature - Favorite Foods & Meal Templates (v1.42 - COMPLETE)
