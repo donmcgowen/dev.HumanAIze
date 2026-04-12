@@ -12,6 +12,8 @@ import { QuantitySelector } from "./QuantitySelector";
 import { SizeSelector } from "./SizeSelector";
 import { FoodInsights } from "./FoodInsights";
 import { AIFoodScanner } from "./AIFoodScanner";
+import { FavoriteFoods } from "./FavoriteFoods";
+import { MealTemplates } from "./MealTemplates";
 
 interface USDAFoodResult {
   fdcId: string;
@@ -54,6 +56,8 @@ export function FoodLogger() {
   const [showVariantSelector, setShowVariantSelector] = useState(false);
   const [variantType, setVariantType] = useState<"quantity" | "size" | null>(null);
   const [showAIScanner, setShowAIScanner] = useState(false);
+  const [showFavorites, setShowFavorites] = useState(false);
+  const [showMeals, setShowMeals] = useState(false);
 
   // Queries
   const { data: foodLogs, isLoading, refetch } = trpc.food.getDayLogs.useQuery({
@@ -522,6 +526,22 @@ export function FoodLogger() {
             >
               AI Scanner
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFavorites(!showFavorites)}
+              className={showFavorites ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-500" : ""}
+            >
+              Favorites
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowMeals(!showMeals)}
+              className={showMeals ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500" : ""}
+            >
+              Meals
+            </Button>
           </div>
 
           {/* AI Food Scanner Modal */}
@@ -530,6 +550,48 @@ export function FoodLogger() {
             onClose={() => setShowAIScanner(false)}
             onFoodsRecognized={handleAIFoodsRecognized}
           />
+
+
+          {/* Favorite Foods Section */}
+          {showFavorites && (
+            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <FavoriteFoods
+                onSelectFood={(food) => {
+                  setSelectedFood({
+                    fdcId: food.id,
+                    description: food.foodName,
+                    calories: food.calories,
+                    protein: food.protein,
+                    carbs: food.carbs,
+                    fat: food.fat,
+                    servingSize: 1,
+                    servingUnit: "serving",
+                  });
+                  setQuantity("1");
+                  setQuantityUnit("serving");
+                  setShowFavorites(false);
+                }}
+              />
+            </div>
+          )}
+
+          {/* Meal Templates Section */}
+          {showMeals && (
+            <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
+              <MealTemplates
+                currentMeals={(foodLogs || []).map(log => ({
+                  foodName: log.foodName,
+                  calories: log.calories,
+                  protein: log.proteinGrams,
+                  carbs: log.carbsGrams,
+                  fat: log.fatGrams,
+                }))}
+                onSelectMeal={(meal) => {
+                  setShowMeals(false);
+                }}
+              />
+            </div>
+          )}
 
           {/* Meal Type Selection */}
           <div>

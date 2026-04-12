@@ -553,3 +553,15 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [ ] Calculate weekly weight loss/gain needed to reach goal by target date
 - [ ] Test calculations with different profile data
 - [ ] Verify macros align with fitness goals (high protein for muscle, calorie deficit for fat loss)
+
+
+## Feature - Favorite Foods & Meal Templates (v1.42 - In Progress)
+
+- [ ] Create FavoriteFoods component with add/remove UI
+- [ ] Create MealTemplates component with save/load UI
+- [ ] Add favorite foods dropdown to FoodLogger
+- [ ] Add meal templates dropdown to FoodLogger
+- [ ] Implement quick-select functionality
+- [ ] Test favorite foods add/remove
+- [ ] Test meal templates save/load
+- [ ] Test quick-select in FoodLogger
