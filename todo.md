@@ -771,3 +771,11 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Test cache hit performance vs. Gemini API calls
 - [x] Verify search results are returned from cache when available
 - [x] Monitor cache size and implement cleanup if needed
+
+
+## Bug Report - Recently Added Section Overlaying Add Food Button (v1.58 - FIXED)
+
+- [x] Hide Recently Added section by default when Food Logging page loads
+- [x] Remove Recently Added section from main UI to declutter
+- [x] Ensure Add Food button is always visible and accessible
+- [x] Users can access recent foods through Favorites instead

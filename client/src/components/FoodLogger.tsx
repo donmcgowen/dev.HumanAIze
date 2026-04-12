@@ -584,38 +584,8 @@ export function FoodLogger() {
                 onClick={() => setShowMeals(!showMeals)}
                 className={showMeals ? "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500" : "flex-1"}
               >
-            {/* Recently Added Foods Section */}
-            {recentFoods && recentFoods.length > 0 && (
-              <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700">
-                <h3 className="text-sm font-semibold mb-3 text-slate-300">Recently Added</h3>
-                <div className="space-y-2">
-                  {recentFoods.map((food: any) => (
-                    <div
-                      key={food.id}
-                      className="flex items-center justify-between p-2 bg-slate-700/50 rounded hover:bg-slate-700 cursor-pointer transition"
-                      onClick={() => {
-                        addFoodLog.mutate({
-                          foodName: food.foodName,
-                          servingSize: food.servingSize || "1 serving",
-                          calories: food.calories,
-                          proteinGrams: food.proteinGrams,
-                          carbsGrams: food.carbsGrams,
-                          fatGrams: food.fatGrams,
-                          mealType,
-                          loggedAt: Date.now(),
-                        });
-                        toast.success(`Added ${food.foodName} to ${mealType}`);
-                      }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{food.foodName}</p>
-                        <p className="text-xs text-slate-400">{food.calories} cal</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Recently Added Foods Section - Hidden by default */}
+            {/* Removed to declutter the UI. Users can access recent foods through Favorites. */}
                 Meals
               </Button>
             </div>
