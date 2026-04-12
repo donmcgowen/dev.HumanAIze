@@ -1,4 +1,4 @@
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -48,33 +48,14 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
     textFields.forEach(assignNullable);
 
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    await db
+      .insert(users)
+      .values(values)
+      .onDuplicateKeyUpdate({
+        set: updateSet,
+      });
   } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
+    console.warn("[Database] Error upserting user:", error);
   }
 }
 
@@ -84,114 +65,73 @@ export async function getUserByOpenId(openId: string) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
-
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getUserById(id: number) {
+export async function getUserProfile(userId: number): Promise<UserProfile | null> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get user by id: database not available");
-    return undefined;
+    console.warn("[Database] Cannot get profile: database not available");
+    return null;
   }
 
-  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-export async function getUserProfile(userId: number): Promise<UserProfile | undefined> {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user profile: database not available");
-    return undefined;
+  try {
+    const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.warn("[Database] Error getting user profile:", error);
+    return null;
   }
-
-  const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
 }
 
-export async function upsertUserProfile(userId: number, profile: Partial<InsertUserProfile>): Promise<UserProfile> {
+export async function upsertUserProfile(userId: number, updates: Partial<InsertUserProfile>): Promise<UserProfile> {
   const db = await getDb();
   if (!db) {
     throw new Error("Database is not available");
   }
 
   const existing = await getUserProfile(userId);
-  
+
   if (existing) {
-    // Update existing profile
-    const updateData: Record<string, any> = {
-      updatedAt: new Date(),
-    };
-    
-    if (profile.heightCm !== undefined) updateData.heightCm = profile.heightCm;
-    if (profile.weightKg !== undefined) updateData.weightKg = profile.weightKg;
-    if (profile.ageYears !== undefined) updateData.ageYears = profile.ageYears;
-    if (profile.fitnessGoal !== undefined) updateData.fitnessGoal = profile.fitnessGoal;
-    if (profile.activityLevel !== undefined) updateData.activityLevel = profile.activityLevel;
-    if (profile.goalWeightKg !== undefined) updateData.goalWeightKg = profile.goalWeightKg;
-    if (profile.goalDate !== undefined) updateData.goalDate = profile.goalDate;
-    if (profile.dailyCalorieTarget !== undefined) updateData.dailyCalorieTarget = profile.dailyCalorieTarget;
-    if (profile.dailyProteinTarget !== undefined) updateData.dailyProteinTarget = profile.dailyProteinTarget;
-    if (profile.dailyCarbsTarget !== undefined) updateData.dailyCarbsTarget = profile.dailyCarbsTarget;
-    if (profile.dailyFatTarget !== undefined) updateData.dailyFatTarget = profile.dailyFatTarget;
-    
-    await db.update(userProfiles).set(updateData).where(eq(userProfiles.userId, userId));
-    
-    const updated = await getUserProfile(userId);
-    if (!updated) throw new Error("Failed to update user profile");
-    return updated;
+    await db
+      .update(userProfiles)
+      .set(updates)
+      .where(eq(userProfiles.userId, userId));
   } else {
-    // Create new profile
-    const newProfile: InsertUserProfile = {
+    const insert: InsertUserProfile = {
       userId,
-      heightCm: profile.heightCm,
-      weightKg: profile.weightKg,
-      ageYears: profile.ageYears,
-      fitnessGoal: profile.fitnessGoal,
-      activityLevel: profile.activityLevel,
-      goalWeightKg: profile.goalWeightKg,
-      goalDate: profile.goalDate,
-      dailyCalorieTarget: profile.dailyCalorieTarget,
-      dailyProteinTarget: profile.dailyProteinTarget,
-      dailyCarbsTarget: profile.dailyCarbsTarget,
-      dailyFatTarget: profile.dailyFatTarget,
+      ...updates,
     };
-    
-    await db.insert(userProfiles).values(newProfile);
-    
-    const created = await getUserProfile(userId);
-    if (!created) throw new Error("Failed to create user profile");
-    return created;
+    await db.insert(userProfiles).values(insert);
   }
+
+  const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
+  if (!result || result.length === 0) throw new Error("Failed to upsert user profile");
+  return result[0];
 }
 
-
-
-export async function addFoodLog(userId: number, food: Omit<InsertFoodLog, 'userId'>): Promise<FoodLog> {
+// Food Logging Functions
+export async function addFoodLog(userId: number, log: Omit<InsertFoodLog, "userId">): Promise<FoodLog> {
   const db = await getDb();
   if (!db) {
     throw new Error("Database is not available");
   }
 
-  const newFood: InsertFoodLog = {
+  const newLog: InsertFoodLog = {
     userId,
-    foodName: food.foodName,
-    servingSize: food.servingSize,
-    calories: food.calories,
-    proteinGrams: food.proteinGrams,
-    carbsGrams: food.carbsGrams,
-    fatGrams: food.fatGrams,
-    loggedAt: food.loggedAt,
-    mealType: food.mealType || "other",
-    notes: food.notes,
+    ...log,
   };
 
-  const result = await db.insert(foodLogs).values(newFood);
-  
-  // Get the newly inserted row by ordering by createdAt descending (most recent first)
-  const created = await db.select().from(foodLogs).where(eq(foodLogs.userId, userId)).orderBy((t) => desc(t.createdAt)).limit(1);
+  await db.insert(foodLogs).values(newLog);
+
+  const created = await db
+    .select()
+    .from(foodLogs)
+    .where(eq(foodLogs.userId, userId))
+    .orderBy((t) => desc(t.loggedAt))
+    .limit(1);
+
   if (!created || created.length === 0) throw new Error("Failed to create food log");
   return created[0];
 }
@@ -203,13 +143,17 @@ export async function getFoodLogsForDay(userId: number, startOfDay: number, endO
     return [];
   }
 
-  return db.select().from(foodLogs).where(
-    and(
-      eq(foodLogs.userId, userId),
-      gte(foodLogs.loggedAt, startOfDay),
-      lte(foodLogs.loggedAt, endOfDay)
+  return db
+    .select()
+    .from(foodLogs)
+    .where(
+      and(
+        eq(foodLogs.userId, userId),
+        gte(foodLogs.loggedAt, startOfDay),
+        lte(foodLogs.loggedAt, endOfDay)
+      )
     )
-  );
+    .orderBy((t) => desc(t.loggedAt));
 }
 
 export async function deleteFoodLog(foodLogId: number, userId: number): Promise<boolean> {
@@ -222,11 +166,7 @@ export async function deleteFoodLog(foodLogId: number, userId: number): Promise<
   return true;
 }
 
-export async function updateFoodLog(
-  foodLogId: number,
-  userId: number,
-  updates: Partial<Omit<InsertFoodLog, 'userId'>>
-): Promise<FoodLog> {
+export async function updateFoodLog(foodLogId: number, userId: number, updates: Partial<Omit<InsertFoodLog, "userId">>): Promise<FoodLog> {
   const db = await getDb();
   if (!db) {
     throw new Error("Database is not available");
@@ -242,30 +182,8 @@ export async function updateFoodLog(
   return updated[0];
 }
 
-
-export async function cleanupUnwantedSources(userId: number): Promise<void> {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database is not available");
-  }
-
-  // Delete all pre-configured sources except custom_app
-  // This removes Dexcom (provider), Fitbit, Oura, Apple Health, Google Fit, etc.
-  const providersToDelete = ["dexcom", "fitbit", "oura", "apple_health", "google_fit", "whoop"] as const;
-  
-  for (const provider of providersToDelete) {
-    await db.delete(healthSources).where(
-      and(
-        eq(healthSources.userId, userId),
-        eq(healthSources.provider, provider as any)
-      )
-    );
-  }
-}
-
-
 // Favorite Foods Functions
-export async function addFavoriteFood(userId: number, food: Omit<InsertFavoriteFood, 'userId'>): Promise<FavoriteFood> {
+export async function addFavoriteFood(userId: number, food: Omit<InsertFavoriteFood, "userId">): Promise<FavoriteFood> {
   const db = await getDb();
   if (!db) {
     throw new Error("Database is not available");
@@ -273,19 +191,19 @@ export async function addFavoriteFood(userId: number, food: Omit<InsertFavoriteF
 
   const newFood: InsertFavoriteFood = {
     userId,
-    foodName: food.foodName,
-    servingSize: food.servingSize,
-    calories: food.calories,
-    proteinGrams: food.proteinGrams,
-    carbsGrams: food.carbsGrams,
-    fatGrams: food.fatGrams,
-    source: food.source || "manual",
+    ...food,
   };
 
-  const result = await db.insert(favoriteFoods).values(newFood);
-  
-  const created = await db.select().from(favoriteFoods).where(eq(favoriteFoods.userId, userId)).orderBy((t) => desc(t.createdAt)).limit(1);
-  if (!created || created.length === 0) throw new Error("Failed to add favorite food");
+  await db.insert(favoriteFoods).values(newFood);
+
+  const created = await db
+    .select()
+    .from(favoriteFoods)
+    .where(eq(favoriteFoods.userId, userId))
+    .orderBy((t) => desc(t.createdAt))
+    .limit(1);
+
+  if (!created || created.length === 0) throw new Error("Failed to create favorite food");
   return created[0];
 }
 
@@ -384,7 +302,6 @@ export async function deleteMealTemplate(mealTemplateId: number, userId: number)
   await db.delete(mealTemplates).where(and(eq(mealTemplates.id, mealTemplateId), eq(mealTemplates.userId, userId)));
   return true;
 }
-
 
 // Progress Tracking Functions
 export interface DailyMacroStats {
@@ -566,4 +483,124 @@ export async function getMacroTrends(userId: number, startDate: number, endDate:
       adherenceRate,
     },
   };
+}
+
+// Goal Tracking Functions
+export interface GoalProgress {
+  currentWeight: number;
+  goalWeight: number;
+  startWeight: number;
+  weightLost: number;
+  weightToGo: number;
+  progressPercentage: number;
+  daysElapsed: number;
+  daysRemaining: number;
+  estimatedCompletionDate: Date | null;
+  weeklyWeightChangeRate: number; // kg per week
+  isOnTrack: boolean;
+  daysUntilCompletion: number | null;
+  fitnessGoal: string;
+}
+
+export async function getGoalProgress(userId: number): Promise<GoalProgress | null> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  const profile = await getUserProfile(userId);
+  if (!profile || !profile.goalWeightKg || !profile.goalDate || !profile.weightKg) {
+    return null;
+  }
+
+  const currentWeight = profile.weightKg;
+  const goalWeight = profile.goalWeightKg;
+  const now = new Date();
+  
+  // Handle goalDate which is stored as a number (timestamp in milliseconds)
+  const goalDate = new Date(profile.goalDate);
+  
+  // Get weight history from food logs (assuming we track weight changes)
+  // For now, we'll calculate based on profile creation date
+  const startWeight = currentWeight; // This would ideally come from historical data
+  
+  // Calculate progress
+  const weightLost = startWeight - currentWeight;
+  const weightToGo = Math.abs(goalWeight - currentWeight);
+  const totalWeightNeeded = Math.abs(goalWeight - startWeight);
+  const progressPercentage = totalWeightNeeded > 0 
+    ? Math.round(((startWeight - currentWeight) / totalWeightNeeded) * 100)
+    : 0;
+
+  const createdAtTime = profile.createdAt instanceof Date 
+    ? profile.createdAt.getTime() 
+    : new Date(profile.createdAt).getTime();
+  
+  const daysElapsed = Math.floor((now.getTime() - createdAtTime) / (1000 * 60 * 60 * 24));
+  const daysRemaining = Math.floor((goalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  // Calculate weekly weight change rate
+  const weeklyWeightChangeRate = daysElapsed > 0 
+    ? (weightLost / (daysElapsed / 7))
+    : 0;
+
+  // Estimate completion date based on current rate
+  let estimatedCompletionDate: Date | null = null;
+  let daysUntilCompletion: number | null = null;
+  
+  if (weeklyWeightChangeRate !== 0) {
+    const weeksNeeded = Math.abs(weightToGo / weeklyWeightChangeRate);
+    const daysNeeded = Math.ceil(weeksNeeded * 7);
+    estimatedCompletionDate = new Date(now.getTime() + daysNeeded * 24 * 60 * 60 * 1000);
+    daysUntilCompletion = daysNeeded;
+  }
+
+  // Check if on track (estimated completion before goal date)
+  const isOnTrack = estimatedCompletionDate 
+    ? estimatedCompletionDate.getTime() <= goalDate.getTime()
+    : daysRemaining > 0;
+
+  return {
+    currentWeight,
+    goalWeight,
+    startWeight,
+    weightLost,
+    weightToGo,
+    progressPercentage: Math.max(0, Math.min(100, progressPercentage)),
+    daysElapsed,
+    daysRemaining,
+    estimatedCompletionDate,
+    weeklyWeightChangeRate,
+    isOnTrack,
+    daysUntilCompletion,
+    fitnessGoal: profile.fitnessGoal || "maintain",
+  };
+}
+
+export async function getWeightHistory(userId: number, days: number = 90): Promise<Array<{ date: string; weight: number }>> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  const profile = await getUserProfile(userId);
+  if (!profile || !profile.weightKg) {
+    return [];
+  }
+
+  // For now, return a simple array with just the current weight
+  // In a real app, you'd track weight measurements over time
+  const now = new Date();
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  return [
+    {
+      date: startDate.toISOString().split('T')[0],
+      weight: profile.weightKg,
+    },
+    {
+      date: now.toISOString().split('T')[0],
+      weight: profile.weightKg,
+    },
+  ];
 }

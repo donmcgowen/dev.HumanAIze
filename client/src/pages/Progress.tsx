@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Calendar, TrendingUp, Target, Zap } from "lucide-react";
+import { GoalTracker } from "@/components/GoalTracker";
 
 type ViewType = "weekly" | "monthly";
 
@@ -97,6 +98,11 @@ export function Progress() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Progress Tracking</h1>
           <p className="text-slate-400">Monitor your macro trends and consistency over time</p>
+        </div>
+
+        {/* Goal Tracker Section */}
+        <div className="mb-12">
+          <GoalTracker />
         </div>
 
         {/* Controls */}

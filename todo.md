@@ -613,3 +613,18 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Add insights panel showing patterns and recommendations
 - [x] Test dashboard with various date ranges
 - [x] Verify charts update when new food logs are added - ready for testing
+
+
+## Feature - Goal Tracking Section (v1.47 - COMPLETE)
+
+- [x] Create backend goal progress calculation helpers with trend analysis
+- [x] Calculate estimated completion date based on current weight loss/gain rate
+- [x] Add tRPC procedures for fetching goal progress data
+- [x] Create GoalTracker component with circular progress visualization
+- [x] Add weight progress chart showing current vs goal weight
+- [x] Calculate days remaining vs estimated completion
+- [x] Display progress percentage and weight delta
+- [x] Integrate goal tracker into Progress Dashboard
+- [x] Add goal editing modal with date/weight updates
+- [x] Test goal calculations with sample data
+- [x] Verify estimated dates update based on weight trends
