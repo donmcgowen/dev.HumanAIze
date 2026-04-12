@@ -14,6 +14,7 @@ import { FoodInsights } from "./FoodInsights";
 import { AIFoodScanner } from "./AIFoodScanner";
 import { FavoriteFoods } from "./FavoriteFoods";
 import { MealTemplates } from "./MealTemplates";
+import { AddFoodModal } from "./AddFoodModal";
 
 interface USDAFoodResult {
   fdcId: string;
@@ -58,6 +59,7 @@ export function FoodLogger() {
   const [showAIScanner, setShowAIScanner] = useState(false);
   const [showFavorites, setShowFavorites] = useState(false);
   const [showMeals, setShowMeals] = useState(false);
+  const [showAddFoodModal, setShowAddFoodModal] = useState(false);
 
   // Queries
   const { data: foodLogs, isLoading, refetch } = trpc.food.getDayLogs.useQuery({
@@ -321,6 +323,20 @@ export function FoodLogger() {
     return macros;
   }, [foodsByMeal]);
 
+  const handleAddFoodFromModal = (food: any) => {
+    addFoodLog.mutate({
+      foodName: food.foodName,
+      servingSize: food.servingSize,
+      calories: Math.round(food.calories),
+      proteinGrams: Math.round(food.proteinGrams * 10) / 10,
+      carbsGrams: Math.round(food.carbsGrams * 10) / 10,
+      fatGrams: Math.round(food.fatGrams * 10) / 10,
+      mealType,
+      loggedAt: Date.now(),
+    });
+    toast.success(`Added ${food.foodName} to ${mealType}`);
+  };
+
   const handleAddFood = () => {
     if (useManualEntry) {
       if (!manualFoodName || !manualCalories) {
@@ -494,44 +510,19 @@ export function FoodLogger() {
           <CardDescription>Search USDA database or manually enter food and macros</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Entry Mode Toggle */}
-          <div className="flex gap-2 flex-wrap">
+          {/* Add Food Button */}
+          <div className="flex gap-2">
             <Button
-              variant={!useManualEntry ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setUseManualEntry(false);
-                setSelectedFood(null);
-                setSearchQuery("");
-              }}
-              className={!useManualEntry ? "bg-cyan-500 hover:bg-cyan-600" : ""}
+              onClick={() => setShowAddFoodModal(true)}
+              className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white"
+              size="lg"
             >
-              Search USDA Database
-            </Button>
-            <Button
-              variant={useManualEntry ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setUseManualEntry(true);
-                setSelectedFood(null);
-                setSearchQuery("");
-              }}
-              className={useManualEntry ? "bg-cyan-500 hover:bg-cyan-600" : ""}
-            >
-              Manual Entry
-            </Button>
-            <BarcodeScanner onBarcodeScanned={handleBarcodeScanned} isLoading={barcodeLoading} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAIScanner(true)}
-              className="bg-purple-600 hover:bg-purple-700 text-white border-purple-500"
-            >
-              AI Scanner
+              <Plus className="h-4 w-4 mr-2" />
+              Add Food
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={() => setShowFavorites(!showFavorites)}
               className={showFavorites ? "bg-amber-600 hover:bg-amber-700 text-white border-amber-500" : ""}
             >
@@ -539,13 +530,21 @@ export function FoodLogger() {
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={() => setShowMeals(!showMeals)}
               className={showMeals ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-500" : ""}
             >
               Meals
             </Button>
           </div>
+
+          {/* Add Food Modal */}
+          <AddFoodModal
+            isOpen={showAddFoodModal}
+            onClose={() => setShowAddFoodModal(false)}
+            onFoodAdded={handleAddFoodFromModal}
+            mealType={mealType}
+          />
 
           {/* AI Food Scanner Modal */}
           <AIFoodScanner
