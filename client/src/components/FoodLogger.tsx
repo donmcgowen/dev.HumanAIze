@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Search, Edit2, Check, X, Loader2 } from "lucide-react";
+import { Plus, Trash2, Search, Edit2, Check, X, Loader2, Star } from "lucide-react";
 import { useState, useMemo } from "react";
 import { BarcodeScanner } from "./BarcodeScanner";
 import { QuantitySelector } from "./QuantitySelector";
@@ -64,6 +64,21 @@ export function FoodLogger() {
   const [showFavorites, setShowFavorites] = useState(false);
   const [showMeals, setShowMeals] = useState(false);
   const [showAddFoodModal, setShowAddFoodModal] = useState(false);
+
+  // Fetch favorites to check which foods are favorited
+  const { data: favorites, refetch: refetchFavorites } = trpc.food.getFavorites.useQuery();
+  const addFavoriteMutation = trpc.food.addFavorite.useMutation({
+    onSuccess: () => {
+      refetchFavorites();
+      toast.success("Added to favorites");
+    },
+  });
+  const deleteFavoriteMutation = trpc.food.deleteFavorite.useMutation({
+    onSuccess: () => {
+      refetchFavorites();
+      toast.success("Removed from favorites");
+    },
+  });
 
   // Queries
   const { data: foodLogs, isLoading, refetch } = trpc.food.getDayLogs.useQuery({
@@ -483,6 +498,29 @@ export function FoodLogger() {
                       <Button
                         size="sm"
                         variant="ghost"
+                        onClick={() => {
+                          const isFavorited = favorites?.some(fav => fav.foodName === log.foodName);
+                          if (isFavorited) {
+                            const fav = favorites?.find(f => f.foodName === log.foodName);
+                            if (fav) deleteFavoriteMutation.mutate({ favoriteFoodId: fav.id });
+                          } else {
+                            addFavoriteMutation.mutate({
+                              foodName: log.foodName,
+                              servingSize: log.servingSize || "1 serving",
+                              calories: log.calories,
+                              proteinGrams: log.proteinGrams,
+                              carbsGrams: log.carbsGrams,
+                              fatGrams: log.fatGrams,
+                            });
+                          }
+                        }}
+                        className={favorites?.some(fav => fav.foodName === log.foodName) ? "text-yellow-400 hover:text-yellow-300" : "text-slate-400 hover:text-yellow-400"}
+                      >
+                        <Star className="h-4 w-4" fill={favorites?.some(fav => fav.foodName === log.foodName) ? "currentColor" : "none"} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         onClick={() => handleEditStart(log)}
                         className="text-slate-400 hover:text-white"
                       >
@@ -582,6 +620,19 @@ export function FoodLogger() {
                   });
                   setQuantity("1");
                   setQuantityUnit("serving");
+                  setShowFavorites(false);
+                }}
+                onQuickAdd={(food, amount, unit) => {
+                  addFoodLog.mutate({
+                    foodName: food.foodName,
+                    servingSize: `${amount}${unit}`,
+                    calories: Math.round(food.calories * amount),
+                    proteinGrams: Math.round(food.proteinGrams * amount * 10) / 10,
+                    carbsGrams: Math.round(food.carbsGrams * amount * 10) / 10,
+                    fatGrams: Math.round(food.fatGrams * amount * 10) / 10,
+                    mealType,
+                    loggedAt: Date.now(),
+                  });
                   setShowFavorites(false);
                 }}
               />

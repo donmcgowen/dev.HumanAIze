@@ -165,6 +165,21 @@ export async function getFoodLogsForDay(userId: number, startOfDay: number, endO
     .orderBy((t) => desc(t.loggedAt));
 }
 
+export async function getRecentFoods(userId: number, limit: number = 5): Promise<FoodLog[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get recent foods: database not available");
+    return [];
+  }
+
+  return db
+    .select()
+    .from(foodLogs)
+    .where(eq(foodLogs.userId, userId))
+    .orderBy((t) => desc(t.loggedAt))
+    .limit(limit);
+}
+
 export async function deleteFoodLog(foodLogId: number, userId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) {

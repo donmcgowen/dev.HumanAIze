@@ -22,7 +22,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
@@ -492,6 +492,13 @@ export const appRouter = router({
         };
         return calculateMacrosForServing(food, input.amount, input.unit);
       }),
+    getRecent: protectedProcedure
+      .input(
+        z.object({
+          limit: z.number().int().min(1).max(20).default(5),
+        })
+      )
+      .query(({ ctx, input }) => getRecentFoods(ctx.user.id, input.limit)),
   }),
   sync: router({
     status: protectedProcedure.query(() => getSyncStatus()),

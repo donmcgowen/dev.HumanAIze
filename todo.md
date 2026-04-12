@@ -727,3 +727,36 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Test with multiple foods to ensure accuracy
 - [x] Fix cup conversion: 1 cup = 30g (not 240g) for dry cereals
 - [x] Write and pass 7 unit tests for macro calculations
+
+
+## Enhancement - Recently Added Foods Quick Access (v1.54)
+
+- [ ] Query recently added foods from database (last 5 foods)
+- [ ] Display Recently Added section below Add Food, Favorites, Meals buttons
+- [ ] Show food name, calories, and date added for each recent food
+- [ ] Allow quick re-add of recent foods with one click
+- [ ] Test with multiple recently added foods
+- [ ] Verify quick re-add functionality works correctly
+
+## Enhancement - Calorie Goal Progress Bar (v1.55)
+
+- [ ] Add calorie goal field to user profile (default: 2000 kcal)
+- [ ] Calculate remaining calories for the day in Daily Totals
+- [ ] Display visual progress bar showing calories consumed vs goal
+- [ ] Show percentage and remaining calories text
+- [ ] Color code progress bar (green when under goal, yellow when near, red when over)
+- [ ] Test with various calorie intake levels
+- [ ] Verify progress bar updates in real-time as foods are added
+
+
+## Enhancement - Star Icon to Favorite Foods (v1.56 - COMPLETE)
+
+- [x] Add star icon to each food log in Today's Food section
+- [x] Implement favorite/unfavorite toggle when clicking star
+- [x] Show filled star when food is favorited, empty when not
+- [x] Add visual feedback (toast) when food is favorited/unfavorited
+- [x] Enhance Favorites modal to show portion adjustment controls
+- [x] Add quick-add button in Favorites to add with last used portion
+- [x] Add option to update portion before adding to log
+- [x] Test star toggle functionality
+- [x] Test Favorites quick-add with portion adjustment
