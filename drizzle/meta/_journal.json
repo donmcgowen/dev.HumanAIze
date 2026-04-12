@@ -71,6 +71,13 @@
       "when": 1776015301830,
       "tag": "0009_colossal_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1776020591947,
+      "tag": "0010_adorable_salo",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, lt, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate } from "../drizzle/schema";
+import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -627,4 +627,61 @@ export async function getWeightHistory(userId: number, days: number = 90): Promi
       weight: profile.weightKg,
     },
   ];
+}
+
+export async function getCachedFoodSearchResults(query: string): Promise<FoodSearchCache[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get cached food search: database not available");
+    return [];
+  }
+
+  const now = new Date();
+  const results = await db
+    .select()
+    .from(foodSearchCache)
+    .where(and(eq(foodSearchCache.searchQuery, query.toLowerCase()), gte(foodSearchCache.expiresAt, now)))
+    .orderBy(desc(foodSearchCache.createdAt))
+    .limit(10);
+
+  return results;
+}
+
+export async function cacheFoodSearchResults(query: string, foods: Omit<InsertFoodSearchCache, "searchQuery" | "createdAt" | "expiresAt">[]): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot cache food search: database not available");
+    return;
+  }
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30); // Cache for 30 days
+
+  const cachesToInsert: InsertFoodSearchCache[] = foods.map(food => ({
+    searchQuery: query.toLowerCase(),
+    ...food,
+    createdAt: new Date(),
+    expiresAt,
+  }));
+
+  try {
+    await db.insert(foodSearchCache).values(cachesToInsert);
+  } catch (error) {
+    console.warn("[Database] Error caching food search results:", error);
+  }
+}
+
+export async function cleanupExpiredCache(): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot cleanup cache: database not available");
+    return;
+  }
+
+  const now = new Date();
+  try {
+    await db.delete(foodSearchCache).where(lt(foodSearchCache.expiresAt, now));
+  } catch (error) {
+    console.warn("[Database] Error cleaning up expired cache:", error);
+  }
 }

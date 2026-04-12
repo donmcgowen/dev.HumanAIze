@@ -281,3 +281,21 @@ export type FavoriteFood = typeof favoriteFoods.$inferSelect;
 export type InsertFavoriteFood = typeof favoriteFoods.$inferInsert;
 export type MealTemplate = typeof mealTemplates.$inferSelect;
 export type InsertMealTemplate = typeof mealTemplates.$inferInsert;
+
+export const foodSearchCache = mysqlTable("food_search_cache", {
+  id: int("id").autoincrement().primaryKey(),
+  searchQuery: varchar("searchQuery", { length: 191 }).notNull(),
+  foodName: varchar("foodName", { length: 191 }).notNull(),
+  description: text("description"),
+  calories: int("calories").notNull(),
+  proteinGrams: double("proteinGrams").notNull(),
+  carbsGrams: double("carbsGrams").notNull(),
+  fatGrams: double("fatGrams").notNull(),
+  servingSize: varchar("servingSize", { length: 120 }).default("100g").notNull(),
+  source: mysqlEnum("source", ["gemini", "usda", "open_food_facts"]).default("gemini").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+});
+
+export type FoodSearchCache = typeof foodSearchCache.$inferSelect;
+export type InsertFoodSearchCache = typeof foodSearchCache.$inferInsert;

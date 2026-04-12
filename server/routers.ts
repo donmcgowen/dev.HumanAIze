@@ -22,7 +22,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
@@ -467,7 +467,41 @@ export const appRouter = router({
     searchWithAI: publicProcedure
       .input(z.object({ query: z.string().min(1) }))
       .query(async ({ input }) => {
-        return await searchFoodWithGemini(input.query);
+        // Check cache first
+        const cached = await getCachedFoodSearchResults(input.query);
+        if (cached.length > 0) {
+          console.log(`[Food Search] Cache hit for query: "${input.query}" (${cached.length} results)`);
+          return cached.map(c => ({
+            name: c.foodName,
+            description: c.description || "",
+            caloriesPer100g: c.calories,
+            proteinPer100g: c.proteinGrams,
+            carbsPer100g: c.carbsGrams,
+            fatPer100g: c.fatGrams,
+          }));
+        }
+        
+        // Cache miss - call Gemini API
+        console.log(`[Food Search] Cache miss for query: "${input.query}" - calling Gemini API`);
+        const results = await searchFoodWithGemini(input.query);
+        
+        // Cache the results for future searches
+        if (results.length > 0) {
+          const cacheData = results.map(r => ({
+            foodName: r.name,
+            description: r.description,
+            calories: r.caloriesPer100g,
+            proteinGrams: r.proteinPer100g,
+            carbsGrams: r.carbsPer100g,
+            fatGrams: r.fatPer100g,
+            servingSize: "100g",
+            source: "gemini" as const,
+          }));
+          await cacheFoodSearchResults(input.query, cacheData);
+          console.log(`[Food Search] Cached ${results.length} results for query: "${input.query}"`);
+        }
+        
+        return results;
       }),
     calculateServingMacros: publicProcedure
       .input(
