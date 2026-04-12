@@ -667,21 +667,21 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Verify food data is correctly added to daily totals - integration ready
 
 
-## Bug Report - Food Search Not Displaying Food Names (v1.50)
+## Bug Report - Food Search Not Displaying Food Names (v1.50 - COMPLETE)
 
-- [ ] Fix SearchFoodTab to display food names in search results
-- [ ] Show serving size for each food result
-- [ ] Display macro breakdown (calories, protein, carbs, fat) for each result
-- [ ] Make results clickable to select food
-- [ ] Test search with various food queries
-- [ ] Verify selected food is properly added to meal
+- [x] Fix SearchFoodTab to display food names in search results
+- [x] Show serving size for each food result (displayed as per-100g values)
+- [x] Display macro breakdown (calories, protein, carbs, fat) for each result
+- [x] Make results clickable to select food
+- [x] Test search with various food queries
+- [x] Verify selected food is properly added to meal
 
-## Enhancement - Barcode Icon for AI Scanner Tab (v1.51)
+## Enhancement - Barcode Icon for AI Scanner Tab (v1.51 - COMPLETE)
 
-- [ ] Add barcode scanning icon to AI Scanner tab
-- [ ] Improve visual design with better spacing and layout
-- [ ] Add hover effects and visual feedback
-- [ ] Test icon displays correctly on all screen sizes
+- [x] Add barcode scanning icon to AI Scanner tab
+- [x] Improve visual design with better spacing and layout
+- [x] Add hover effects and visual feedback
+- [x] Test icon displays correctly on all screen sizes
 
 ## Enhancement - AI-Powered Food Search with Gemini (v1.52 - COMPLETE)
 

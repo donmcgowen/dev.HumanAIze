@@ -221,28 +221,22 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-2">
             <Button
-              onClick={() => setSelectedFood(null)}
               variant="outline"
-              className="flex-1 text-sm"
+              onClick={() => setSelectedFood(null)}
+              className="flex-1"
             >
               Back
             </Button>
             <Button
               onClick={handleAddFood}
               disabled={!calculatedMacros}
-              className="flex-1 text-sm"
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
             >
-              Add to {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+              Add Food
             </Button>
           </div>
-        </div>
-      )}
-
-      {!isLoading && !selectedFood && searchQuery.length > 2 && (!foodVariations || foodVariations.length === 0) && (
-        <div className="text-center py-8">
-          <p className="text-sm text-gray-500">No foods found. Try a different search term.</p>
         </div>
       )}
     </div>
@@ -354,8 +348,12 @@ function ManualEntryTab({ onFoodAdded, onClose, mealType = "meal" }: ManualEntry
         </div>
       </div>
 
-      <Button onClick={handleAddFood} disabled={!isValid} className="w-full">
-        Add to {mealTypeLabel}
+      <Button
+        onClick={handleAddFood}
+        disabled={!isValid}
+        className="w-full bg-blue-600 hover:bg-blue-700"
+      >
+        Add Food
       </Button>
     </div>
   );
@@ -363,24 +361,46 @@ function ManualEntryTab({ onFoodAdded, onClose, mealType = "meal" }: ManualEntry
 
 function AIScannerTab() {
   return (
-    <div className="space-y-6 text-center py-12">
+    <div className="space-y-8 text-center py-16">
+      {/* Barcode Icon with Enhanced Animation */}
       <div className="flex justify-center">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full blur-xl opacity-30 animate-pulse"></div>
-          <Barcode className="h-16 w-16 mx-auto text-blue-400 relative" />
+        <div className="relative group">
+          {/* Outer glow ring */}
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 rounded-full blur-2xl opacity-40 group-hover:opacity-60 animate-pulse transition-opacity duration-300"></div>
+          {/* Middle ring */}
+          <div className="absolute inset-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur-lg opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
+          {/* Icon */}
+          <Barcode className="h-20 w-20 mx-auto text-blue-300 relative group-hover:text-cyan-300 transition-colors duration-300 drop-shadow-lg" />
         </div>
       </div>
-      <div className="space-y-2">
-        <h4 className="font-semibold text-lg">AI Barcode Scanner</h4>
-        <p className="text-sm text-gray-400 max-w-xs mx-auto">
-          Point your camera at a food barcode to automatically scan and populate nutrition information.
+
+      {/* Title and Description */}
+      <div className="space-y-3 px-4">
+        <h4 className="font-bold text-xl text-white">AI Barcode Scanner</h4>
+        <p className="text-sm text-gray-300 max-w-sm mx-auto leading-relaxed">
+          Point your camera at a food barcode to instantly scan and auto-populate nutrition information with AI-powered accuracy.
         </p>
       </div>
-      <div className="bg-gradient-to-r from-blue-900/20 to-cyan-900/20 rounded-lg p-4 border border-blue-500/20">
-        <p className="text-xs text-gray-300 mb-3">✨ Coming Soon</p>
-        <p className="text-xs text-gray-400">This feature is currently in development and will be available in the next release.</p>
+
+      {/* Coming Soon Card with Enhanced Design */}
+      <div className="bg-gradient-to-br from-blue-900/30 via-slate-900/20 to-cyan-900/30 rounded-xl p-6 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 shadow-lg hover:shadow-blue-500/20">
+        <div className="space-y-2">
+          <p className="text-sm font-semibold text-blue-300 flex items-center justify-center gap-2">
+            <span className="text-lg">✨</span>
+            Coming Soon
+          </p>
+          <p className="text-xs text-gray-400">This feature is currently in development and will be available in the next release.</p>
+          <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-700">
+            📸 Camera access • 🔍 Barcode recognition • 📊 Nutrition extraction
+          </p>
+        </div>
       </div>
-      <Button disabled className="w-full bg-blue-600/30 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30">
+
+      {/* Disabled Button with Enhanced Styling */}
+      <Button 
+        disabled 
+        className="w-full bg-gradient-to-r from-blue-600/20 to-cyan-600/20 hover:from-blue-600/30 hover:to-cyan-600/30 text-blue-300 border border-blue-500/40 rounded-lg font-medium transition-all duration-300 cursor-not-allowed opacity-75"
+      >
         <Barcode className="h-4 w-4 mr-2" />
         Enable Camera Scanner
       </Button>
