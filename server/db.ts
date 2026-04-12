@@ -129,6 +129,7 @@ export async function upsertUserProfile(userId: number, profile: Partial<InsertU
     if (profile.weightKg !== undefined) updateData.weightKg = profile.weightKg;
     if (profile.ageYears !== undefined) updateData.ageYears = profile.ageYears;
     if (profile.fitnessGoal !== undefined) updateData.fitnessGoal = profile.fitnessGoal;
+    if (profile.activityLevel !== undefined) updateData.activityLevel = profile.activityLevel;
     if (profile.goalWeightKg !== undefined) updateData.goalWeightKg = profile.goalWeightKg;
     if (profile.goalDate !== undefined) updateData.goalDate = profile.goalDate;
     if (profile.dailyCalorieTarget !== undefined) updateData.dailyCalorieTarget = profile.dailyCalorieTarget;
@@ -149,6 +150,7 @@ export async function upsertUserProfile(userId: number, profile: Partial<InsertU
       weightKg: profile.weightKg,
       ageYears: profile.ageYears,
       fitnessGoal: profile.fitnessGoal,
+      activityLevel: profile.activityLevel,
       goalWeightKg: profile.goalWeightKg,
       goalDate: profile.goalDate,
       dailyCalorieTarget: profile.dailyCalorieTarget,

@@ -587,3 +587,15 @@ Note: Modal rendering issue encountered. Feature skipped for now. Can be revisit
 - [x] Update generateInsights to use profile targets when available
 - [x] Test end-to-end: set custom targets in profile, verify recommendations use them
 - [x] Verify recommendations change when targets are updated
+
+
+## Feature - Macro Calculator (v1.45 - COMPLETE)
+
+- [x] Create macro calculator utility with algorithms for different fitness goals - Mifflin-St Jeor formula
+- [x] Add activity level field to userProfiles schema (sedentary, lightly_active, moderately_active, very_active, extremely_active)
+- [x] Add activity level selector to Profile component UI
+- [x] Create MacroCalculator component with visual display of suggested macros
+- [x] Add "Apply Suggestions" button to auto-fill daily targets
+- [x] Integrate calculator into Profile page
+- [x] Test macro calculations for different goal/activity combinations
+- [x] Verify applied macros are saved to database and used in recommendations

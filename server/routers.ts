@@ -184,6 +184,7 @@ export const appRouter = router({
           weightKg: z.number().positive().optional(),
           ageYears: z.number().int().min(1).max(150).optional(),
           fitnessGoal: z.enum(["lose_fat", "build_muscle", "maintain"]).optional(),
+          activityLevel: z.enum(["sedentary", "lightly_active", "moderately_active", "very_active", "extremely_active"]).optional(),
           goalWeightKg: z.number().positive().optional(),
           goalDate: z.number().optional(),
           dailyCalorieTarget: z.number().int().positive().optional(),

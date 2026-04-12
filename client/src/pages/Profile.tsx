@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InsightsPanel } from "@/components/InsightsPanel";
+import { MacroCalculator } from "@/components/MacroCalculator";
 import { toast } from "sonner";
 import { Loader2, Settings } from "lucide-react";
+import type { ActivityLevel, MacroSuggestion } from "../../../shared/macroCalculator";
 
 export function Profile() {
   const { data: profile, isLoading: isLoadingProfile, refetch } = trpc.profile.get.useQuery();
@@ -31,6 +33,8 @@ export function Profile() {
   const [dailyProteinTarget, setDailyProteinTarget] = useState<string>("");
   const [dailyCarbsTarget, setDailyCarbsTarget] = useState<string>("");
   const [dailyFatTarget, setDailyFatTarget] = useState<string>("");
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderately_active");
+  const [showMacroCalculator, setShowMacroCalculator] = useState(false);
 
   // Unit conversion helpers
   const convertWeight = (kg: number, toUnit: "kg" | "lbs") => {
@@ -67,6 +71,10 @@ export function Profile() {
       setDailyProteinTarget(profile.dailyProteinTarget?.toString() || "");
       setDailyCarbsTarget(profile.dailyCarbsTarget?.toString() || "");
       setDailyFatTarget(profile.dailyFatTarget?.toString() || "");
+      // Load activity level
+      if (profile.activityLevel) {
+        setActivityLevel(profile.activityLevel as ActivityLevel);
+      }
       // Load goal data
       setGoalWeightKg(profile.goalWeightKg?.toString() || "");
       if (profile.goalDate) {
@@ -165,6 +173,7 @@ export function Profile() {
         weightKg: weightKgValue,
         ageYears: formData.ageYears ? parseInt(formData.ageYears) : undefined,
         fitnessGoal: (formData.fitnessGoal as "lose_fat" | "build_muscle" | "maintain") || undefined,
+        activityLevel: activityLevel,
         goalWeightKg: goalWeightValue,
         goalDate: goalDateTimestamp,
         dailyCalorieTarget: dailyCalorieTarget ? parseInt(dailyCalorieTarget) : undefined,
@@ -403,6 +412,24 @@ export function Profile() {
                 </SelectContent>
               </Select>
 
+              <div>
+                <Label htmlFor="activityLevel" className="text-slate-300">
+                  Activity Level
+                </Label>
+                <Select value={activityLevel} onValueChange={(value) => setActivityLevel(value as ActivityLevel)}>
+                  <SelectTrigger className="mt-2 bg-slate-900 border-white/10 text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-900 border-white/10">
+                    <SelectItem value="sedentary">Sedentary (little or no exercise)</SelectItem>
+                    <SelectItem value="lightly_active">Lightly Active (1-3 days/week)</SelectItem>
+                    <SelectItem value="moderately_active">Moderately Active (3-5 days/week)</SelectItem>
+                    <SelectItem value="very_active">Very Active (6-7 days/week)</SelectItem>
+                    <SelectItem value="extremely_active">Extremely Active (physical job)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               {formData.fitnessGoal && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -538,6 +565,25 @@ export function Profile() {
               )}
             </CardContent>
           </Card>
+
+          {/* Macro Calculator */}
+          {formData.heightCm && formData.weightKg && formData.ageYears && formData.fitnessGoal && (
+            <MacroCalculator
+              heightCm={parseFloat(formData.heightCm)}
+              weightKg={parseFloat(formData.weightKg)}
+              ageYears={parseInt(formData.ageYears)}
+              fitnessGoal={formData.fitnessGoal as "lose_fat" | "build_muscle" | "maintain"}
+              activityLevel={activityLevel}
+              onApply={(macros: MacroSuggestion) => {
+                setDailyCalorieTarget(macros.dailyCalories.toString());
+                setDailyProteinTarget(macros.dailyProtein.toString());
+                setDailyCarbsTarget(macros.dailyCarbs.toString());
+                setDailyFatTarget(macros.dailyFat.toString());
+                toast.success("Macro targets applied!");
+              }}
+              isLoading={updateProfile.isPending}
+            />
+          )}
 
           {/* Insights Section */}
           <InsightsPanel 

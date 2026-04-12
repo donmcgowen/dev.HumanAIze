@@ -1,0 +1,1 @@
+ALTER TABLE `user_profiles` ADD `activityLevel` enum('sedentary','lightly_active','moderately_active','very_active','extremely_active');
