@@ -24,8 +24,8 @@ export function Profile() {
 
   const [bmi, setBmi] = useState<number | null>(null);
   const [bmiCategory, setBmiCategory] = useState<string>("");
-  const [weightUnit, setWeightUnit] = useState<"kg" | "lbs">("kg");
-  const [heightUnit, setHeightUnit] = useState<"cm" | "in">("cm");
+  const [weightUnit, setWeightUnit] = useState<"kg" | "lbs">("lbs");
+  const [heightUnit, setHeightUnit] = useState<"cm" | "in">("in");
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>("moderately_active");
   
   // Maintenance calories state
@@ -272,11 +272,11 @@ export function Profile() {
                 Height
               </Label>
               <div className="flex gap-2 mt-2">
-                <Input
-                  id="heightCm"
-                  name="heightCm"
-                  type="number"
-                  placeholder={heightUnit === "cm" ? "170" : "67"}
+              <Input
+                id="heightCm"
+                name="heightCm"
+                type="number"
+                placeholder={heightUnit === "in" ? "5" : "170"}
                   value={formData.heightCm}
                   onChange={handleInputChange}
                   className="bg-slate-900 border-white/10 text-white placeholder-slate-500"
@@ -302,11 +302,11 @@ export function Profile() {
                 Weight
               </Label>
               <div className="flex gap-2 mt-2">
-                <Input
-                  id="weightKg"
-                  name="weightKg"
-                  type="number"
-                  placeholder={weightUnit === "kg" ? "70" : "154"}
+              <Input
+                id="weightKg"
+                name="weightKg"
+                type="number"
+                placeholder={weightUnit === "lbs" ? "154" : "70"}
                   value={formData.weightKg}
                   onChange={handleInputChange}
                   className="bg-slate-900 border-white/10 text-white placeholder-slate-500"
