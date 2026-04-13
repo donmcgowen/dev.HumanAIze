@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Upload, FileText, FileUp, Loader2, AlertCircle, CheckCircle, Activity, Brain, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
@@ -7,9 +7,13 @@ import { trpc } from "@/lib/trpc";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Configure PDF.js worker
+// Configure PDF.js worker - use a worker script that doesn't require module import
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  // Use the worker from the pdfjs-dist package directly
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.js',
+    import.meta.url
+  ).toString();
 }
 
 export function CGMSection() {
@@ -215,7 +219,7 @@ export function CGMSection() {
               <CardContent className="pt-6 pb-4">
                 <p className="text-slate-400 text-sm mb-1">A1C Estimate</p>
                 <p className={`text-3xl font-bold ${stats.a1cEstimate <= 5.7 ? "text-green-400" : stats.a1cEstimate <= 6.4 ? "text-yellow-400" : "text-red-400"}`}>
-                  {stats.a1cEstimate}%
+                  {stats.a1cEstimate.toFixed(1)}
                 </p>
                 <p className="text-slate-500 text-xs mt-1">estimated from avg glucose</p>
                 <div className="mt-3 text-xs text-slate-400">
