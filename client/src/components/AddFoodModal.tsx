@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, FileText, Barcode, Loader2 } from "lucide-react";
+import { Search, FileText, Barcode, Loader2, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { skipToken } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -75,13 +75,20 @@ interface SearchFoodTabProps {
 
 function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedFood, setSelectedFood] = useState<any>(null);
   const [servingAmount, setServingAmount] = useState("100");
   const [servingUnit, setServingUnit] = useState<"g" | "oz">("g");
 
-  const { data: foodVariations, isLoading } = trpc.food.searchWithAI.useQuery(
-    { query: searchQuery },
-    { enabled: searchQuery.length > 2 }
+  // Debounce: wait 500ms after user stops typing before searching
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const { data: foodVariations, isLoading, error } = trpc.food.searchWithAI.useQuery(
+    { query: debouncedQuery },
+    { enabled: debouncedQuery.trim().length > 2, retry: 1 }
   );
 
   const { data: calculatedMacros } = trpc.food.calculateServingMacros.useQuery(
@@ -127,16 +134,32 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
           id="search-food"
           placeholder="e.g., chicken, pasta, salmon, broccoli..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => { setSearchQuery(e.target.value); setSelectedFood(null); }}
           className="w-full"
+          autoFocus
         />
-        <p className="text-xs text-gray-500">Start typing to find top 10 food variations</p>
+        <p className="text-xs text-gray-500">
+          {debouncedQuery.trim().length <= 2 ? "Type at least 3 characters to search" : "Searching for food variations..."}
+        </p>
       </div>
 
       {isLoading && (
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin mr-2" />
-          <span className="text-sm text-gray-600">Finding foods...</span>
+          <Loader2 className="h-5 w-5 animate-spin mr-2 text-cyan-400" />
+          <span className="text-sm text-gray-400">Finding foods...</span>
+        </div>
+      )}
+
+      {error && !isLoading && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-md text-red-400">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span className="text-sm">Search failed. Try a different query or use Manual entry.</span>
+        </div>
+      )}
+
+      {!isLoading && !error && debouncedQuery.trim().length > 2 && foodVariations && foodVariations.length === 0 && !selectedFood && (
+        <div className="text-center py-6 text-slate-400 text-sm">
+          No results found for "{debouncedQuery}". Try a different term or use Manual entry.
         </div>
       )}
 
