@@ -31,8 +31,18 @@ export function parseClarityCSV(csvContent: string): ClarityImportResult {
   const errors: string[] = [];
   let skippedCount = 0;
 
-  // Skip header row
-  const dataLines = lines.slice(1);
+  // Skip header row and filter empty lines
+  const dataLines = lines.slice(1).filter(line => line.trim().length > 0);
+  
+  if (dataLines.length === 0) {
+    errors.push("No data rows found in CSV");
+    return {
+      readings: [],
+      importedCount: 0,
+      skippedCount: 0,
+      errors,
+    };
+  }
 
   dataLines.forEach((line, index) => {
     try {
@@ -45,8 +55,20 @@ export function parseClarityCSV(csvContent: string): ClarityImportResult {
 
       const [timestampStr, valueStr, trendStr, typeStr] = parts;
 
-      // Parse timestamp
-      const timestamp = new Date(timestampStr).getTime();
+      // Parse timestamp with multiple format support
+      let timestamp = new Date(timestampStr).getTime();
+      
+      // If parsing failed, try alternative formats
+      if (isNaN(timestamp)) {
+        // Try MM/DD/YYYY HH:MM:SS format
+        const altMatch = timestampStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})/);
+        if (altMatch) {
+          const [, month, day, year, hours, minutes, seconds] = altMatch;
+          const dateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hours.padStart(2, '0')}:${minutes}:${seconds}`;
+          timestamp = new Date(dateStr).getTime();
+        }
+      }
+      
       if (isNaN(timestamp)) {
         errors.push(`Row ${index + 2}: Invalid timestamp format "${timestampStr}"`);
         skippedCount++;
