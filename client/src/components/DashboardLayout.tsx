@@ -62,14 +62,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <p className="mt-4 max-w-lg text-sm leading-7 text-slate-300">
             Sign in to access your protected dashboard, connected sources, AI health assistant, and weekly metabolic summaries.
           </p>
-          <Button
-            className="mt-8 h-11 rounded-none border border-white/30 bg-white text-slate-950 hover:bg-cyan-100"
-            onClick={() => {
-              window.location.href = "/login";
-            }}
-          >
-            Sign in to continue
-          </Button>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3">
+            <Button
+              className="h-11 flex-1 rounded-none border border-white/30 bg-white text-slate-950 hover:bg-cyan-100"
+              onClick={() => { window.location.href = "/login"; }}
+            >
+              Sign In
+            </Button>
+            <Button
+              className="h-11 flex-1 rounded-none border border-cyan-400/60 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 hover:text-cyan-100"
+              onClick={() => { window.location.href = "/signup"; }}
+            >
+              Create Account
+            </Button>
+          </div>
+          <p className="mt-4 text-xs text-slate-500 text-center">
+            New to HumanAIze? Create a free account to get started.
+          </p>
         </div>
       </div>
     );
