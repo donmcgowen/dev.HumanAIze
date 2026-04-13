@@ -4,7 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { InsightsPanel } from "@/components/InsightsPanel";
 import { StepCounter } from "@/components/StepCounter";
-import { Loader2, Zap, Plus, ChevronDown, Footprints } from "lucide-react";
+import { WeightTracker } from "@/components/WeightTracker";
+import { Loader2, Zap, Plus, ChevronDown, Footprints, Weight } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState, useCallback } from "react";
 
@@ -212,6 +213,15 @@ export function Monitoring() {
             Steps
           </h2>
           <StepCounter onTotalChange={handleStepUpdate} />
+        </div>
+
+        {/* Weight Tracking Section */}
+        <div className="mt-6">
+          <h2 className="text-xl font-semibold text-white mb-3 flex items-center gap-2">
+            <Weight className="w-5 h-5 text-blue-400" />
+            Weight Tracking
+          </h2>
+          <WeightTracker />
         </div>
       </div>
     </div>

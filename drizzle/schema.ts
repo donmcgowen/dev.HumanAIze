@@ -316,3 +316,15 @@ export const progressPhotos = mysqlTable("progress_photos", {
 
 export type ProgressPhoto = typeof progressPhotos.$inferSelect;
 export type InsertProgressPhoto = typeof progressPhotos.$inferInsert;
+
+export const weightEntries = mysqlTable("weight_entries", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  weightLbs: int("weightLbs").notNull(), // Whole numbers only
+  recordedAt: bigint("recordedAt", { mode: "number" }).notNull(), // Unix timestamp
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type WeightEntry = typeof weightEntries.$inferSelect;
+export type InsertWeightEntry = typeof weightEntries.$inferInsert;

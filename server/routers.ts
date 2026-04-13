@@ -23,7 +23,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory, addWeightEntry, getWeightEntries, deleteWeightEntry, getWeightProgressData } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
@@ -827,6 +827,34 @@ export const appRouter = router({
       .query(({ ctx, input }) => getMacroTrends(ctx.user.id, input.startDate, input.endDate)),
     getGoal: protectedProcedure
       .query(({ ctx }) => getGoalProgress(ctx.user.id)),
+  }),
+  weight: router({
+    addEntry: protectedProcedure
+      .input(
+        z.object({
+          weightLbs: z.number().int().positive(),
+          recordedAt: z.number().int(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => addWeightEntry(ctx.user.id, input.weightLbs, input.recordedAt, input.notes)),
+    getEntries: protectedProcedure
+      .input(
+        z.object({
+          days: z.number().int().min(7).max(365).default(90),
+        })
+      )
+      .query(({ ctx, input }) => getWeightEntries(ctx.user.id, input.days)),
+    deleteEntry: protectedProcedure
+      .input(z.object({ entryId: z.number().int() }))
+      .mutation(({ ctx, input }) => deleteWeightEntry(input.entryId, ctx.user.id)),
+    getProgressData: protectedProcedure
+      .input(
+        z.object({
+          days: z.number().int().min(7).max(365).default(90),
+        })
+      )
+      .query(({ ctx, input }) => getWeightProgressData(ctx.user.id, input.days)),
   }),
 });
 

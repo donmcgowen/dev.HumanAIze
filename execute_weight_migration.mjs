@@ -21,17 +21,17 @@ try {
   const connection = await mysql.createConnection(config);
   
   // Read and execute the migration SQL
-  const sql = fs.readFileSync('./drizzle/migrations/0003_add_start_weight.sql', 'utf-8');
-  const statements = sql.split(';').filter(s => s.trim());
+  const sql = fs.readFileSync('./drizzle/0016_funny_black_crow.sql', 'utf-8');
+  const statements = sql.split('--> statement-breakpoint').filter(s => s.trim());
   
   for (const statement of statements) {
     if (statement.trim()) {
       try {
         await connection.execute(statement);
-        console.log('✓ Executed:', statement.substring(0, 50) + '...');
+        console.log('✓ Executed:', statement.substring(0, 60) + '...');
       } catch (err) {
-        if (err.code === 'ER_DUP_FIELDNAME') {
-          console.log('✓ Column already exists');
+        if (err.code === 'ER_TABLE_EXISTS_ERROR' || err.code === 'ER_DUP_FIELDNAME') {
+          console.log('✓ Already exists');
         } else {
           throw err;
         }

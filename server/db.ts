@@ -1,6 +1,6 @@
 import { and, eq, gte, lte, lt, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading, activitySamples } from "../drizzle/schema";
+import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading, activitySamples, weightEntries, InsertWeightEntry, WeightEntry } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -538,16 +538,24 @@ export async function getGoalProgress(userId: number): Promise<GoalProgress | nu
     return null;
   }
 
-  const currentWeight = profile.weightLbs;
   const goalWeight = profile.goalWeightLbs;
   const now = new Date();
   
   // Handle goalDate which is stored as a number (timestamp in milliseconds)
   const goalDate = new Date(profile.goalDate);
   
-  // Get weight history from food logs (assuming we track weight changes)
-  // For now, we'll calculate based on profile creation date
-  const startWeight = currentWeight; // This would ideally come from historical data
+  // Get weight history from weight_entries table
+  const weightEntries = await getWeightEntries(userId, 365); // Get up to 1 year of history
+  
+  let startWeight = profile.weightLbs;
+  let currentWeight = profile.weightLbs;
+  
+  if (weightEntries.length > 0) {
+    // Sort entries by date to find earliest and latest
+    const sorted = [...weightEntries].sort((a, b) => a.recordedAt - b.recordedAt);
+    startWeight = sorted[0].weightLbs; // Earliest entry
+    currentWeight = sorted[sorted.length - 1].weightLbs; // Most recent entry
+  }
   
   // Calculate progress
   const weightLost = startWeight - currentWeight;
@@ -991,4 +999,81 @@ export async function getStepHistory(
     .orderBy(desc(activitySamples.sampleDate));
 
   return rows.map((r) => ({ date: r.sampleDate, steps: r.steps }));
+}
+
+
+// Weight Tracking Functions
+export async function addWeightEntry(userId: number, weightLbs: number, recordedAt: number, notes?: string): Promise<WeightEntry> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  const newEntry: InsertWeightEntry = {
+    userId,
+    weightLbs,
+    recordedAt,
+    notes: notes || null,
+  };
+
+  await db.insert(weightEntries).values(newEntry);
+
+  const created = await db
+    .select()
+    .from(weightEntries)
+    .where(eq(weightEntries.userId, userId))
+    .orderBy((t) => desc(t.recordedAt))
+    .limit(1);
+
+  if (!created || created.length === 0) throw new Error("Failed to create weight entry");
+  return created[0];
+}
+
+export async function getWeightEntries(userId: number, days: number = 90): Promise<WeightEntry[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get weight entries: database not available");
+    return [];
+  }
+
+  const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  try {
+    const entries = await db
+      .select()
+      .from(weightEntries)
+      .where(and(eq(weightEntries.userId, userId), gte(weightEntries.recordedAt, cutoffTime)))
+      .orderBy((t) => desc(t.recordedAt));
+
+    return entries;
+  } catch (error) {
+    console.error("[Database] Error fetching weight entries:", error);
+    return [];
+  }
+}
+
+export async function deleteWeightEntry(entryId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database is not available");
+  }
+
+  await db.delete(weightEntries).where(and(eq(weightEntries.id, entryId), eq(weightEntries.userId, userId)));
+  return true;
+}
+
+export async function getWeightProgressData(userId: number, days: number = 90): Promise<Array<{ date: string; weight: number }>> {
+  const entries = await getWeightEntries(userId, days);
+  
+  if (entries.length === 0) {
+    return [];
+  }
+
+  // Sort by date ascending for chart display
+  const sorted = [...entries].sort((a, b) => a.recordedAt - b.recordedAt);
+
+  return sorted.map(entry => ({
+    date: new Date(entry.recordedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    weight: entry.weightLbs,
+  }));
 }
