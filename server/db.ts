@@ -1085,3 +1085,78 @@ export async function getWeightProgressData(userId: number, days: number = 90): 
     weight: entry.weightLbs,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// CGM – glucose stats and daily averages
+// ---------------------------------------------------------------------------
+
+export async function getCGMStats(userId: number, days: number = 30) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const readings = await db
+    .select()
+    .from(glucoseReadings)
+    .where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since)))
+    .orderBy(desc(glucoseReadings.readingAt));
+
+  if (readings.length === 0) return null;
+
+  const values = readings.map(r => r.mgdl);
+  const avg = values.reduce((s, v) => s + v, 0) / values.length;
+  const inRange = values.filter(v => v >= 70 && v <= 180).length;
+  const above = values.filter(v => v > 180).length;
+  const below = values.filter(v => v < 70).length;
+  const a1c = Math.round(((avg + 46.7) / 28.7) * 100) / 100;
+
+  return {
+    count: readings.length,
+    average: Math.round(avg),
+    min: Math.round(Math.min(...values)),
+    max: Math.round(Math.max(...values)),
+    timeInRange: Math.round((inRange / values.length) * 100),
+    timeAboveRange: Math.round((above / values.length) * 100),
+    timeBelowRange: Math.round((below / values.length) * 100),
+    a1cEstimate: a1c,
+    latestReading: readings[0]?.mgdl ?? null,
+    latestAt: readings[0]?.readingAt ?? null,
+  };
+}
+
+export async function getCGMDailyAverages(userId: number, days: number = 7): Promise<{ date: string; avg: number; min: number; max: number }[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const readings = await db
+    .select()
+    .from(glucoseReadings)
+    .where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since)))
+    .orderBy(glucoseReadings.readingAt);
+
+  // Group by calendar day
+  const byDay = new Map<string, number[]>();
+  for (const r of readings) {
+    const day = new Date(r.readingAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day)!.push(r.mgdl);
+  }
+
+  return Array.from(byDay.entries()).map(([date, vals]) => ({
+    date,
+    avg: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length),
+    min: Math.round(Math.min(...vals)),
+    max: Math.round(Math.max(...vals)),
+  }));
+}
+
+export async function getRecentFoodLogsForInsights(userId: number, days: number = 7) {
+  const db = await getDb();
+  if (!db) return [];
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  return db.select().from(foodLogs)
+    .where(and(eq(foodLogs.userId, userId), gte(foodLogs.loggedAt, since)))
+    .orderBy(desc(foodLogs.loggedAt))
+    .limit(50);
+}

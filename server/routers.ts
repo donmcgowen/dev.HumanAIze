@@ -23,7 +23,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory, addWeightEntry, getWeightEntries, deleteWeightEntry, getWeightProgressData } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory, addWeightEntry, getWeightEntries, deleteWeightEntry, getWeightProgressData, getCGMStats, getCGMDailyAverages, getRecentFoodLogsForInsights } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
@@ -880,6 +880,97 @@ export const appRouter = router({
           daysUntilCompletion: goalProgress.daysUntilCompletion,
           isOnTrack: goalProgress.isOnTrack,
         };
+      }),
+  }),
+  cgm: router({
+    getStats: protectedProcedure
+      .input(z.object({ days: z.number().int().min(7).max(90).default(30) }))
+      .query(({ ctx, input }) => getCGMStats(ctx.user.id, input.days)),
+    getDailyAverages: protectedProcedure
+      .input(z.object({ days: z.number().int().min(7).max(30).default(7) }))
+      .query(({ ctx, input }) => getCGMDailyAverages(ctx.user.id, input.days)),
+    getInsights: protectedProcedure
+      .query(async ({ ctx }) => {
+        const [stats, dailyAvgs, foodLogs, goalProgress] = await Promise.all([
+          getCGMStats(ctx.user.id, 30),
+          getCGMDailyAverages(ctx.user.id, 7),
+          getRecentFoodLogsForInsights(ctx.user.id, 7),
+          getGoalProgress(ctx.user.id),
+        ]);
+
+        if (!stats) return null;
+
+        const { invokeLLM } = await import("./_core/llm");
+
+        const foodSummary = foodLogs.slice(0, 20).map(f =>
+          `${f.foodName}: ${f.calories}cal, ${f.proteinGrams}g protein, ${f.carbsGrams}g carbs, ${f.fatGrams}g fat`
+        ).join("\n");
+
+        const goalSummary = goalProgress
+          ? `Goal: ${goalProgress.goalWeight} lbs by ${new Date(goalProgress.daysRemaining * 86400000 + Date.now()).toLocaleDateString()}. Currently ${goalProgress.progressPercentage}% complete.`
+          : "No weight goal set.";
+
+        const prompt = `You are a health coach analyzing a user's metabolic data. Provide 3-4 concise, actionable insights.
+
+Glucose Data (last 30 days):
+- Average: ${stats.average} mg/dL
+- A1C Estimate: ${stats.a1cEstimate}%
+- Time in Range (70-180): ${stats.timeInRange}%
+- Time Above Range: ${stats.timeAboveRange}%
+- Time Below Range: ${stats.timeBelowRange}%
+
+Recent Food Log (last 7 days, up to 20 items):
+${foodSummary || "No food logs available."}
+
+${goalSummary}
+
+Return a JSON object with an "insights" array of exactly 3 items. Each item has:
+- "title": short title (5 words max)
+- "message": actionable advice (1-2 sentences)
+- "type": one of "success", "warning", "info"`;
+
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are a health coach. Return only valid JSON." },
+            { role: "user", content: prompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "cgm_insights",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  insights: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        message: { type: "string" },
+                        type: { type: "string" },
+                      },
+                      required: ["title", "message", "type"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["insights"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+
+        const content = response.choices[0].message.content;
+        const contentStr = typeof content === "string" ? content : "";
+        try {
+          const parsed = JSON.parse(contentStr);
+          return parsed.insights as { title: string; message: string; type: string }[];
+        } catch {
+          return null;
+        }
       }),
   }),
 });

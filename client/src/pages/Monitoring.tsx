@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { InsightsPanel } from "@/components/InsightsPanel";
 import { StepCounter } from "@/components/StepCounter";
 import { WeightTracker } from "@/components/WeightTracker";
+import { CGMSection } from "@/components/CGMSection";
 import { Loader2, Zap, Plus, ChevronDown, Footprints, Weight } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState, useCallback } from "react";
@@ -209,6 +210,11 @@ export function Monitoring() {
             </div>
           </CardContent>
         </Card>
+
+        {/* CGM Data Section */}
+        <div className="mt-6">
+          <CGMSection />
+        </div>
       </div>
     </div>
   );
