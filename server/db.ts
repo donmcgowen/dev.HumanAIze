@@ -1,6 +1,6 @@
-import { and, eq, gte, lte, lt, desc } from "drizzle-orm";
+import { and, eq, gte, lte, lt, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading } from "../drizzle/schema";
+import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading, activitySamples } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -865,4 +865,130 @@ export async function calculateGlucoseStatistics(readings: GlucoseReading[]) {
       end: new Date(readings[0].readingAt).toISOString(),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Step counter — saves to activitySamples (built-in pedometer source)
+// ---------------------------------------------------------------------------
+
+const PEDOMETER_SOURCE_NAME = "Built-in Pedometer";
+
+async function ensurePedometerSource(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const existing = await db
+    .select({ id: healthSources.id })
+    .from(healthSources)
+    .where(
+      and(
+        eq(healthSources.userId, userId),
+        eq(healthSources.displayName, PEDOMETER_SOURCE_NAME)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) return existing[0].id;
+
+  const result = await db.insert(healthSources).values({
+    userId,
+    provider: "custom_app",
+    category: "activity",
+    status: "connected",
+    implementationStage: "custom",
+    authType: "custom",
+    displayName: PEDOMETER_SOURCE_NAME,
+    description: "Steps counted directly by the HumanAIze app accelerometer",
+    lastSyncStatus: "idle",
+  });
+  return (result as any).insertId as number;
+}
+
+export async function logStepsForDay(
+  userId: number,
+  steps: number,
+  dayStart: number
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const sourceId = await ensurePedometerSource(userId);
+
+  const existing = await db
+    .select({ id: activitySamples.id })
+    .from(activitySamples)
+    .where(
+      and(
+        eq(activitySamples.userId, userId),
+        eq(activitySamples.sourceId, sourceId),
+        eq(activitySamples.sampleDate, dayStart)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(activitySamples)
+      .set({ steps })
+      .where(eq(activitySamples.id, existing[0].id));
+  } else {
+    await db.insert(activitySamples).values({
+      userId,
+      sourceId,
+      sampleDate: dayStart,
+      steps,
+      activeMinutes: 0,
+      caloriesBurned: 0,
+      workoutMinutes: 0,
+      distanceKm: 0,
+      sourceLabel: PEDOMETER_SOURCE_NAME,
+    });
+  }
+}
+
+export async function getTodaySteps(userId: number, dayStart: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const sourceId = await ensurePedometerSource(userId);
+
+  const result = await db
+    .select({ steps: activitySamples.steps })
+    .from(activitySamples)
+    .where(
+      and(
+        eq(activitySamples.userId, userId),
+        eq(activitySamples.sourceId, sourceId),
+        eq(activitySamples.sampleDate, dayStart)
+      )
+    )
+    .limit(1);
+
+  return result.length > 0 ? result[0].steps : 0;
+}
+
+export async function getStepHistory(
+  userId: number,
+  startDate: number,
+  endDate: number
+): Promise<{ date: number; steps: number }[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const sourceId = await ensurePedometerSource(userId);
+
+  const rows = await db
+    .select({ sampleDate: activitySamples.sampleDate, steps: activitySamples.steps })
+    .from(activitySamples)
+    .where(
+      and(
+        eq(activitySamples.userId, userId),
+        eq(activitySamples.sourceId, sourceId),
+        gte(activitySamples.sampleDate, startDate),
+        lte(activitySamples.sampleDate, endDate)
+      )
+    )
+    .orderBy(desc(activitySamples.sampleDate));
+
+  return rows.map((r) => ({ date: r.sampleDate, steps: r.steps }));
 }

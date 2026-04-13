@@ -23,7 +23,7 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
@@ -724,6 +724,22 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => getRecentFoods(ctx.user.id, input.limit)),
+  }),
+  steps: router({
+    logToday: protectedProcedure
+      .input(
+        z.object({
+          steps: z.number().int().min(0),
+          dayStart: z.number().int(),
+        })
+      )
+      .mutation(({ ctx, input }) => logStepsForDay(ctx.user.id, input.steps, input.dayStart)),
+    getToday: protectedProcedure
+      .input(z.object({ dayStart: z.number().int() }))
+      .query(({ ctx, input }) => getTodaySteps(ctx.user.id, input.dayStart)),
+    getHistory: protectedProcedure
+      .input(z.object({ startDate: z.number().int(), endDate: z.number().int() }))
+      .query(({ ctx, input }) => getStepHistory(ctx.user.id, input.startDate, input.endDate)),
   }),
   sync: router({
     status: protectedProcedure.query(() => getSyncStatus()),

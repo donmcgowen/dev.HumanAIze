@@ -3,14 +3,22 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { InsightsPanel } from "@/components/InsightsPanel";
-import { Loader2, Activity, Zap, Plus, ChevronDown } from "lucide-react";
+import { StepCounter } from "@/components/StepCounter";
+import { Loader2, Zap, Plus, ChevronDown, Footprints } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState } from "react";
+
+function todayStart() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 export function Monitoring() {
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const { data: sources, isLoading: sourcesLoading } = trpc.sources.list.useQuery();
   const { data: dashboard } = trpc.health.dashboard.useQuery({ rangeDays: 14 });
+  const { data: todaySteps = 0 } = trpc.steps.getToday.useQuery({ dayStart: todayStart() });
   const [, navigate] = useLocation();
   const [expandedSourceId, setExpandedSourceId] = useState<string | null>(null);
 
@@ -174,10 +182,13 @@ export function Monitoring() {
                 <p className="text-2xl font-bold text-red-400">{dashboard?.summary.glucoseAverage.toFixed(1) ?? '--'} mg/dL</p>
                 <p className="text-xs text-slate-500 mt-1">{dashboard?.summary.glucoseAverage ? 'From connected sources' : 'Connect a glucose source to view'}</p>
               </div>
-              <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
-                <p className="text-slate-400 text-sm mb-2">Daily Activity</p>
-                <p className="text-2xl font-bold text-blue-400">{dashboard?.summary.stepsAverage.toLocaleString() ?? '--'} steps</p>
-                <p className="text-xs text-slate-500 mt-1">{dashboard?.summary.stepsAverage ? 'From connected sources' : 'Connect an activity source to view'}</p>
+              <div className="p-4 rounded-lg bg-slate-900 border border-cyan-500/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Footprints className="w-4 h-4 text-cyan-400" />
+                  <p className="text-slate-400 text-sm">Steps Today</p>
+                </div>
+                <p className="text-2xl font-bold text-cyan-400">{todaySteps.toLocaleString()}</p>
+                <p className="text-xs text-slate-500 mt-1">Built-in pedometer • goal: 10,000</p>
               </div>
               <div className="p-4 rounded-lg bg-slate-900 border border-white/10">
                 <p className="text-slate-400 text-sm mb-2">Average Sleep</p>
@@ -192,6 +203,15 @@ export function Monitoring() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Steps Section */}
+        <div className="mt-6">
+          <h2 className="text-xl font-semibold text-white mb-3 flex items-center gap-2">
+            <Footprints className="w-5 h-5 text-cyan-400" />
+            Steps
+          </h2>
+          <StepCounter />
+        </div>
       </div>
     </div>
   );
