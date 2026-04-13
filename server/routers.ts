@@ -370,7 +370,11 @@ export const appRouter = router({
     regenerate: protectedProcedure.mutation(({ ctx }) => refreshWeeklySummary(ctx.user.id)),
   }),
   profile: router({
-    get: protectedProcedure.query(({ ctx }) => getUserProfile(ctx.user.id)),
+    get: protectedProcedure.query(({ ctx }) => {
+      const userId = Number(ctx.user.id);
+      if (!Number.isFinite(userId)) throw new TRPCError({ code: "UNAUTHORIZED" });
+      return getUserProfile(userId);
+    }),
     upsert: protectedProcedure
       .input(
         z.object({
@@ -387,7 +391,11 @@ export const appRouter = router({
           dailyFatTarget: z.number().int().positive().optional(),
         })
       )
-      .mutation(({ ctx, input }) => upsertUserProfile(ctx.user.id, input)),
+      .mutation(({ ctx, input }) => {
+        const userId = Number(ctx.user.id);
+        if (!Number.isFinite(userId)) throw new TRPCError({ code: "UNAUTHORIZED" });
+        return upsertUserProfile(userId, input);
+      }),
   }),
   food: router({
     addLog: protectedProcedure

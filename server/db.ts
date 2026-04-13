@@ -48,12 +48,20 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
     textFields.forEach(assignNullable);
 
-    await db
-      .insert(users)
-      .values(values)
-      .onDuplicateKeyUpdate({
-        set: updateSet,
+    // Only use onDuplicateKeyUpdate if there are fields to update
+    if (Object.keys(updateSet).length > 0) {
+      await db
+        .insert(users)
+        .values(values)
+        .onDuplicateKeyUpdate({
+          set: updateSet,
+        });
+    } else {
+      // If no fields to update, just insert (will be ignored if duplicate)
+      await db.insert(users).values(values).catch(() => {
+        // Ignore duplicate key error
       });
+    }
   } catch (error) {
     console.warn("[Database] Error upserting user:", error);
   }
