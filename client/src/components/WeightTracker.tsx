@@ -6,12 +6,14 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function WeightTracker() {
   const [open, setOpen] = useState(false);
   const [weight, setWeight] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
+  const [isLogsExpanded, setIsLogsExpanded] = useState(false);
 
   // Fetch weight entries and progress data
   const { data: entries = [], refetch: refetchEntries } = trpc.weight.getEntries.useQuery({ days: 90 });
@@ -180,31 +182,46 @@ export function WeightTracker() {
         </div>
       )}
 
-      {/* Weight History */}
+      {/* Weight Logs - Collapsible */}
       {entries.length > 0 && (
-        <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-slate-300 mb-4">Recent Entries</h3>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {entries.slice(0, 10).map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between bg-slate-800 p-3 rounded">
-                <div className="flex-1">
-                  <p className="text-white font-semibold">{entry.weightLbs} lbs</p>
-                  <p className="text-xs text-slate-400">
-                    {new Date(entry.recordedAt).toLocaleDateString()}
-                  </p>
-                  {entry.notes && <p className="text-xs text-slate-300 mt-1">{entry.notes}</p>}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteWeightMutation.mutate({ entryId: entry.id })}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                >
-                  Delete
-                </Button>
+        <div className="bg-slate-900 border border-slate-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setIsLogsExpanded(!isLogsExpanded)}
+            className="w-full flex items-center justify-between p-4 hover:bg-slate-800/50 transition-colors"
+          >
+            <h3 className="text-sm font-semibold text-slate-300">Weight Logs ({entries.length})</h3>
+            {isLogsExpanded ? (
+              <ChevronUp className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
+
+          {isLogsExpanded && (
+            <div className="border-t border-slate-700 p-4">
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {entries.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between bg-slate-800 p-3 rounded">
+                    <div className="flex-1">
+                      <p className="text-white font-semibold">{entry.weightLbs} lbs</p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(entry.recordedAt).toLocaleDateString()}
+                      </p>
+                      {entry.notes && <p className="text-xs text-slate-300 mt-1">{entry.notes}</p>}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteWeightMutation.mutate({ entryId: entry.id })}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
