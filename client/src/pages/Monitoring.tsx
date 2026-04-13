@@ -1,4 +1,3 @@
-import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +7,7 @@ import { WeightTracker } from "@/components/WeightTracker";
 import { Loader2, Zap, Plus, ChevronDown, Footprints, Weight } from "lucide-react";
 import { useLocation } from "wouter";
 import { useState, useCallback } from "react";
+import { trpc } from "@/lib/trpc";
 
 function todayStart() {
   const d = new Date();
@@ -36,32 +36,106 @@ export function Monitoring() {
   const allSources = sources || [];
   const connectedSources = allSources.filter((s) => s.status === "connected");
 
-  // Generate insights based on connected sources
+  // Generate insights based on weight loss, steps, and goals
   const generateInsights = () => {
     const insights = [];
     
-    if (connectedSources.length === 0) {
-      insights.push({
-        type: "tip" as const,
-        title: "Get Started with Health Monitoring",
-        description: "Connect your first health data source to begin tracking your health metrics.",
-        action: "Click the '+' button to add a custom app connection."
-      });
-    } else {
-      insights.push({
-        type: "success" as const,
-        title: "Data Sources Connected",
-        description: `You have ${connectedSources.length} active health data source${connectedSources.length !== 1 ? 's' : ''} syncing your metrics.`,
-        action: "Keep your sources connected for continuous health insights."
-      });
+    // Weight Loss Insights
+    if (user?.profile?.goalWeightLbs && user?.profile?.weightLbs) {
+      const currentWeight = user.profile.weightLbs;
+      const goalWeight = user.profile.goalWeightLbs;
+      const weightToLose = currentWeight - goalWeight;
       
-      if (connectedSources.length < 3) {
+      if (weightToLose > 0) {
+        // Estimate weekly loss rate (assuming ~1-2 lbs per week is healthy)
+        const weeklyLossRate = 1.5; // Default healthy rate
+        const weeksToGoal = Math.ceil(weightToLose / weeklyLossRate);
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + weeksToGoal * 7);
+        
+        insights.push({
+          type: "success" as const,
+          title: "Weight Loss Goal Progress",
+          description: `You're on track to lose ${weightToLose} lbs to reach your goal of ${goalWeight} lbs. At a healthy rate of ~1.5 lbs/week, you could reach your goal by ${targetDate.toLocaleDateString()}.`,
+          action: "Maintain consistent weight tracking and nutrition to stay on pace."
+        });
+      } else if (weightToLose === 0) {
+        insights.push({
+          type: "success" as const,
+          title: "Goal Weight Reached!",
+          description: "Congratulations! You've reached your goal weight. Focus on maintaining your progress.",
+          action: "Continue tracking to maintain your weight and healthy habits."
+        });
+      }
+    }
+    
+    // Steps Insights
+    if (liveSteps > 0) {
+      const dailyGoal = 10000;
+      const stepsPercentage = Math.round((liveSteps / dailyGoal) * 100);
+      
+      if (liveSteps >= dailyGoal) {
+        insights.push({
+          type: "success" as const,
+          title: "Daily Step Goal Achieved!",
+          description: `Great job! You've completed ${liveSteps.toLocaleString()} steps today, exceeding your goal of ${dailyGoal.toLocaleString()}.`,
+          action: "Keep up this activity level to support your weight loss goals."
+        });
+      } else if (liveSteps >= dailyGoal * 0.75) {
         insights.push({
           type: "tip" as const,
-          title: "Add More Data Sources",
-          description: "Connect additional health apps for comprehensive health analysis and better personalized recommendations.",
-          action: "Click the '+' button to add more custom app connections."
+          title: "Almost There on Steps",
+          description: `You're at ${stepsPercentage}% of your daily goal with ${liveSteps.toLocaleString()} steps. Just ${(dailyGoal - liveSteps).toLocaleString()} more to go!`,
+          action: "Take a short walk to finish strong today."
         });
+      } else if (liveSteps > 0) {
+        insights.push({
+          type: "tip" as const,
+          title: "Increase Daily Activity",
+          description: `You've logged ${liveSteps.toLocaleString()} steps today. Aim for ${dailyGoal.toLocaleString()} steps daily to support your weight loss and improve cardiovascular health.`,
+          action: "Try taking short walks throughout the day to boost your step count."
+        });
+      }
+    } else {
+      insights.push({
+        type: "tip" as const,
+        title: "Start Moving Today",
+        description: "No steps logged yet. Daily activity is crucial for weight loss and overall health. Aim for 10,000 steps today.",
+        action: "Take a walk or engage in light activity to get started."
+      });
+    }
+    
+    // Personalized Recommendations
+    if (user?.profile?.goalWeightLbs && user?.profile?.weightLbs) {
+      const currentWeight = user.profile.weightLbs;
+      const goalWeight = user.profile.goalWeightLbs;
+      
+      if (currentWeight > goalWeight) {
+        const recommendations = [];
+        
+        // Activity recommendation
+        if (liveSteps < 8000) {
+          recommendations.push("Increase daily steps to 10,000+ for better calorie burn");
+        }
+        
+        // Nutrition recommendation
+        if (user?.profile?.dailyCalorieTarget) {
+          recommendations.push(`Follow your daily calorie target of ${user.profile.dailyCalorieTarget} kcal`);
+        } else {
+          recommendations.push("Set a daily calorie target in your profile for personalized guidance");
+        }
+        
+        // Consistency recommendation
+        recommendations.push("Track your weight consistently to monitor progress");
+        
+        if (recommendations.length > 0) {
+          insights.push({
+            type: "tip" as const,
+            title: "Recommendations to Hit Your Goal",
+            description: recommendations.join(" • "),
+            action: "Review your profile settings to optimize your goals."
+          });
+        }
       }
     }
     
@@ -135,8 +209,6 @@ export function Monitoring() {
             </div>
           </CardContent>
         </Card>
-
-
       </div>
     </div>
   );
