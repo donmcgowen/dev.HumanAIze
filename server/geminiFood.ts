@@ -15,7 +15,7 @@ export async function searchFoodWithGemini(query: string): Promise<FoodVariation
       messages: [
         {
           role: "system",
-          content: `You are a nutrition expert. When given a food name, return a JSON object with a "foods" array of exactly 10 specific food variations with their nutritional data per 100g.
+          content: `You are a nutrition database expert with knowledge of branded food products, supplements, and whole foods. When given a food name or product name, return a JSON object with a "foods" array of up to 10 relevant results.
 
 Format:
 {
@@ -31,17 +31,23 @@ Format:
   ]
 }
 
-Requirements:
+Rules:
 - Return ONLY valid JSON, no markdown or extra text
-- Include common cooking methods (grilled, fried, baked, raw)
-- Include different cuts or varieties
-- All values must be realistic nutritional data per 100g
+- All nutritional values must be per 100g
 - Calories should match: (protein*4 + carbs*4 + fat*9) approximately
-- Return exactly 10 items in the foods array`,
+
+If the query is a BRANDED or PACKAGED product (e.g. "Muscle Milk", "Quest Bar", "Kind Bar", "Clif Bar", "Gatorade", "Premier Protein", etc.):
+- Return the actual product variants (flavors, sizes, formulas) with real nutrition facts from the product label
+- Include the exact brand name and flavor in the "name" field
+- Use accurate macros from the real product — do NOT make up generic values
+
+If the query is a GENERIC whole food (e.g. "chicken", "rice", "broccoli"):
+- Return variations by cooking method (grilled, baked, raw, fried) and cuts/types
+- Return up to 10 items`,
         },
         {
           role: "user",
-          content: `Generate top 10 food variations for: "${query}"`,
+          content: `Look up nutrition facts for: "${query}"`,
         },
       ],
       response_format: {

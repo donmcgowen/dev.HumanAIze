@@ -682,6 +682,8 @@ export async function cacheFoodSearchResults(query: string, foods: Omit<InsertFo
   }));
 
   try {
+    // Delete old cached results for this query before inserting fresh ones
+    await db.delete(foodSearchCache).where(eq(foodSearchCache.searchQuery, query.toLowerCase()));
     await db.insert(foodSearchCache).values(cachesToInsert);
   } catch (error) {
     console.warn("[Database] Error caching food search results:", error);

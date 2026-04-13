@@ -8,11 +8,11 @@ import { AlertCircle, CheckCircle, TrendingUp } from "lucide-react";
 
 export default function Signup() {
   const [formData, setFormData] = useState({
-    username: "",
+    firstName: "",
+    lastName: "",
     email: "",
     password: "",
     confirmPassword: "",
-    name: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -29,14 +29,14 @@ export default function Signup() {
     setError("");
     setSuccess(false);
 
-    // Validation
-    if (!formData.username || !formData.email || !formData.password) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
       setError("Please fill in all required fields");
       return;
     }
 
-    if (formData.username.length < 3) {
-      setError("Username must be at least 3 characters");
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address");
       return;
     }
 
@@ -52,10 +52,10 @@ export default function Signup() {
 
     try {
       await signupMutation.mutateAsync({
-        username: formData.username,
+        username: formData.email,
         email: formData.email,
         password: formData.password,
-        name: formData.name || undefined,
+        name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
       });
       setSuccess(true);
       setTimeout(() => navigate("/"), 2000);
@@ -73,7 +73,7 @@ export default function Signup() {
               <CheckCircle className="h-14 w-14 text-green-400" />
               <h2 className="text-xl font-semibold text-white">Account Created!</h2>
               <p className="text-sm text-slate-400 text-center">
-                Your account has been created successfully. Redirecting to dashboard...
+                Welcome, {formData.firstName}! Your account has been created. Redirecting to dashboard...
               </p>
             </div>
           </CardContent>
@@ -97,7 +97,7 @@ export default function Signup() {
         <Card className="border border-white/10 bg-slate-900/80 backdrop-blur">
           <CardHeader>
             <CardTitle className="text-white">Create Account</CardTitle>
-            <CardDescription>Fill in your details to get started</CardDescription>
+            <CardDescription>Your email address will be your username</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -108,52 +108,54 @@ export default function Signup() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label htmlFor="name" className="text-sm font-medium text-slate-300">
-                  Full Name
-                </label>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  placeholder="Enter your full name (optional)"
-                  value={formData.name}
-                  onChange={handleChange}
-                  disabled={signupMutation.isPending}
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="username" className="text-sm font-medium text-slate-300">
-                  Username <span className="text-red-400">*</span>
-                </label>
-                <Input
-                  id="username"
-                  name="username"
-                  type="text"
-                  placeholder="Choose a username (min 3 chars)"
-                  value={formData.username}
-                  onChange={handleChange}
-                  disabled={signupMutation.isPending}
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <label htmlFor="firstName" className="text-sm font-medium text-slate-300">
+                    First Name <span className="text-red-400">*</span>
+                  </label>
+                  <Input
+                    id="firstName"
+                    name="firstName"
+                    type="text"
+                    placeholder="First name"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    disabled={signupMutation.isPending}
+                    className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label htmlFor="lastName" className="text-sm font-medium text-slate-300">
+                    Last Name <span className="text-red-400">*</span>
+                  </label>
+                  <Input
+                    id="lastName"
+                    name="lastName"
+                    type="text"
+                    placeholder="Last name"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    disabled={signupMutation.isPending}
+                    className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium text-slate-300">
-                  Email <span className="text-red-400">*</span>
+                  Email Address <span className="text-red-400">*</span>
                 </label>
                 <Input
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder="you@example.com"
                   value={formData.email}
                   onChange={handleChange}
                   disabled={signupMutation.isPending}
                   className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
                 />
+                <p className="text-xs text-slate-500">This will also be your username</p>
               </div>
 
               <div className="space-y-2">

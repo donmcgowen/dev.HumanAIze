@@ -35,6 +35,7 @@ import { recognizeFoodFromPhoto, recognizeFoodFromVoice, recognizeFoodFromPhotoA
 import { storagePut } from "./storage";
 import { analyzeMealWithAI, type MealData, type DailyTargets } from "./mealAnalysis";
 import { searchFoodWithGemini, calculateMacrosForServing } from "./geminiFood";
+import { getLocalCachedFood, saveLocalCachedFood } from "./localFoodCache";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
@@ -666,11 +667,17 @@ export const appRouter = router({
     searchWithAI: publicProcedure
       .input(z.object({ query: z.string().min(1) }))
       .query(async ({ input }) => {
-        // Check cache first
-        const cached = await getCachedFoodSearchResults(input.query);
-        if (cached.length > 0) {
-          console.log(`[Food Search] Cache hit for query: "${input.query}" (${cached.length} results)`);
-          return cached.map(c => ({
+        // 1. Check local file cache first (fast, always available)
+        const localCached = await getLocalCachedFood(input.query);
+        if (localCached && localCached.length > 0) {
+          return localCached;
+        }
+
+        // 2. Check DB cache if available
+        const dbCached = await getCachedFoodSearchResults(input.query);
+        if (dbCached.length > 0) {
+          console.log(`[Food Search] DB cache hit for query: "${input.query}" (${dbCached.length} results)`);
+          const mapped = dbCached.map(c => ({
             name: c.foodName,
             description: c.description || "",
             caloriesPer100g: c.calories,
@@ -678,14 +685,20 @@ export const appRouter = router({
             carbsPer100g: c.carbsGrams,
             fatPer100g: c.fatGrams,
           }));
+          // Backfill local cache from DB results
+          await saveLocalCachedFood(input.query, mapped);
+          return mapped;
         }
-        
-        // Cache miss - call Gemini API
+
+        // 3. Cache miss — call Gemini API
         console.log(`[Food Search] Cache miss for query: "${input.query}" - calling Gemini API`);
         const results = await searchFoodWithGemini(input.query);
-        
-        // Cache the results for future searches
+
         if (results.length > 0) {
+          // Save to local file cache (always works)
+          await saveLocalCachedFood(input.query, results);
+
+          // Save to DB cache if available
           const cacheData = results.map(r => ({
             foodName: r.name,
             description: r.description,
@@ -697,9 +710,8 @@ export const appRouter = router({
             source: "gemini" as const,
           }));
           await cacheFoodSearchResults(input.query, cacheData);
-          console.log(`[Food Search] Cached ${results.length} results for query: "${input.query}"`);
         }
-        
+
         return results;
       }),
     calculateServingMacros: publicProcedure

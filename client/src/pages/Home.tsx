@@ -1,9 +1,10 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, ArrowRight, BookOpen, Zap, TrendingUp, Shield } from "lucide-react";
+import { Loader2, ArrowRight, BookOpen, Zap, TrendingUp, Shield, UserPlus } from "lucide-react";
 import { getLoginUrl } from "@/const";
 import { useState } from "react";
+import { useLocation } from "wouter";
 
 /**
  * Home page with authentication and onboarding
@@ -13,6 +14,7 @@ import { useState } from "react";
 export default function Home() {
   const { user, loading, error, isAuthenticated, logout } = useAuth();
   const [selectedTab, setSelectedTab] = useState<"overview" | "help">("overview");
+  const [, navigate] = useLocation();
 
   if (loading) {
     return (
@@ -96,15 +98,20 @@ export default function Home() {
             {/* Auth Buttons */}
             <div className="flex flex-col gap-3 pt-4">
               <Button
-                onClick={() => window.location.href = getLoginUrl()}
+                onClick={() => navigate("/signup")}
                 className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white h-12 text-base font-semibold"
               >
-                Sign In or Create Account
+                <UserPlus className="mr-2 w-5 h-5" />
+                Create a Free Account
+              </Button>
+              <Button
+                onClick={() => navigate("/login")}
+                variant="outline"
+                className="w-full border-white/20 text-slate-300 hover:bg-white/5 hover:text-white h-12 text-base font-semibold"
+              >
+                Sign In
                 <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
-              <p className="text-center text-sm text-slate-500">
-                Uses secure OAuth authentication
-              </p>
             </div>
 
             {/* Help Section */}
