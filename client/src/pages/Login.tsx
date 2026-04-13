@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import { getLoginUrl } from "@/const";
 import { AlertCircle, TrendingUp } from "lucide-react";
 
 export default function Login() {
@@ -104,7 +105,7 @@ export default function Login() {
             <Button
               variant="outline"
               className="w-full border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 font-semibold"
-              onClick={() => navigate("/signup")}
+              onClick={() => window.location.href = getLoginUrl()}
             >
               Create a Free Account
             </Button>

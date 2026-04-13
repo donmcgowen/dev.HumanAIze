@@ -98,7 +98,7 @@ export default function Home() {
             {/* Auth Buttons */}
             <div className="flex flex-col gap-3 pt-4">
               <Button
-                onClick={() => navigate("/signup")}
+                onClick={() => window.location.href = getLoginUrl()}
                 className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white h-12 text-base font-semibold"
               >
                 <UserPlus className="mr-2 w-5 h-5" />
