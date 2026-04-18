@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+﻿import { useEffect, useState } from "react";
+import { LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Activity, Clock, Zap, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -21,6 +21,8 @@ export default function Dashboard() {
   } = trpc.health.dashboard.useQuery({ rangeDays: 14 });
   const { data: syncData } = trpc.sync.status.useQuery(undefined, { refetchInterval: 30000 });
   const { data: cgmInsights } = trpc.cgm.getInsights.useQuery();
+  const { data: mealGlucoseCorrelations } = trpc.correlations.getMealGlucose.useQuery({ days: 14 });
+  const { data: ruleInsights } = trpc.correlations.getRuleInsights.useQuery({ days: 14 });
   // Always fetch profile directly so macro targets are always in sync with Profile page
   const { data: userProfile } = trpc.profile.get.useQuery(undefined, {
     refetchOnMount: "always",
@@ -161,6 +163,62 @@ export default function Dashboard() {
           )}
       </div>
 
+      {/* Rule-Based Insights */}
+      {ruleInsights && ruleInsights.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-slate-400 uppercase tracking-wide">Personalized Insights</p>
+          {ruleInsights.map((insight, idx) => (
+            <div
+              key={idx}
+              className={`rounded-lg border p-4 ${
+                insight.type === "warning"
+                  ? "border-amber-500/40 bg-amber-500/10"
+                  : insight.type === "success"
+                  ? "border-green-500/40 bg-green-500/10"
+                  : "border-cyan-500/40 bg-cyan-500/10"
+              }`}
+            >
+              <p className={`text-sm font-semibold mb-1 ${
+                insight.type === "warning" ? "text-amber-300" : insight.type === "success" ? "text-green-300" : "text-cyan-300"
+              }`}>
+                {insight.type === "warning" ? "ΓÜá " : insight.type === "success" ? "Γ£ô " : "≡ƒÆí "}{insight.title}
+              </p>
+              <p className="text-xs text-slate-300">{insight.message}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* Meal ΓåÆ Glucose Response */}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Meal ΓåÆ Glucose Response</p>
+        <p className="text-xs text-slate-500 mb-4">Avg carbs logged vs. peak glucose 30 minΓÇô2 h after each meal type (last 14 days)</p>
+        {mealGlucoseCorrelations && mealGlucoseCorrelations.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={mealGlucoseCorrelations.map((d) => ({
+              name: d.mealType.charAt(0).toUpperCase() + d.mealType.slice(1),
+              carbs: d.avgCarbs,
+              glucose: d.avgGlucosePeak,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 12 }} />
+              <YAxis yAxisId="left" stroke="#4ade80" tick={{ fontSize: 11 }} label={{ value: "Carbs (g)", angle: -90, position: "insideLeft", fill: "#4ade80", fontSize: 11 }} />
+              <YAxis yAxisId="right" orientation="right" stroke="#fb923c" tick={{ fontSize: 11 }} domain={[60, "auto"]} label={{ value: "Glucose (mg/dL)", angle: 90, position: "insideRight", fill: "#fb923c", fontSize: 11 }} />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#1e293b", border: "1px solid #475569" }}
+                labelStyle={{ color: "#e2e8f0" }}
+                formatter={(value: number, name: string) =>
+                  name === "Avg Carbs" ? [`${value}g`, name] : name === "Peak Glucose" ? [`${value} mg/dL`, name] : [value, name]
+                }
+              />
+              <Legend />
+              <Bar yAxisId="left" dataKey="carbs" name="Avg Carbs" fill="#4ade80" radius={[3, 3, 0, 0]} opacity={0.8} />
+              <Line yAxisId="right" type="monotone" dataKey="glucose" name="Peak Glucose" stroke="#fb923c" strokeWidth={2} dot={{ r: 4, fill: "#fb923c" }} connectNulls={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-sm text-slate-400">Log meals and manual glucose readings to see your post-meal glucose response patterns here.</p>
+        )}
+      </div>
       {/* Daily Macro Target */}
       <div className="space-y-3">
         <h2 className="text-xl font-semibold text-white">Daily Macro Target</h2>
