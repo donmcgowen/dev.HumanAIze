@@ -1,36 +1,57 @@
-name: Deploy Node app to Azure App Service
+name: Build & Deploy to Azure App Service
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:   # allows manual trigger from GitHub Actions UI
+
+env:
+  NODE_VERSION: '20'
+  APP_NAME: humanaize-app
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
-      - uses: actions/checkout@v4
+      # ── 1. Checkout code ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      # ── 2. Set up Node + pnpm ─────────────────────────────────────────────
+      - name: Enable Corepack (pnpm)
+        run: corepack enable
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
 
-      - name: Enable Corepack
-        run: |
-          corepack enable
-          corepack prepare pnpm@latest --activate
-
+      # ── 3. Install & build ────────────────────────────────────────────────
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Build app
+      - name: Build app (client + server)
         run: pnpm run build
 
+      # ── 4. Prepare deployment package ─────────────────────────────────────
+      # Copy package.json so Azure App Service knows how to start the app
+      - name: Copy package files into dist
+        run: |
+          cp package.json dist/
+          cp pnpm-lock.yaml dist/ 2>/dev/null || true
+
+      # ── 5. Deploy to Azure App Service ────────────────────────────────────
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v1
+        uses: azure/webapps-deploy@v3
         with:
-          app-name: humanaize-app
+          app-name: ${{ env.APP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: .
+          package: dist
+
+      # ── 6. Print live URL ─────────────────────────────────────────────────
+      - name: Deployment complete
+        run: echo "✅ Deployed to https://${{ env.APP_NAME }}.azurewebsites.net"
