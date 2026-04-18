@@ -1,4 +1,4 @@
-import { getDb } from "./db";
+﻿import { getDb } from "./db";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -38,6 +38,8 @@ import { analyzeMealWithAI, type MealData, type DailyTargets } from "./mealAnaly
 import { searchFoodWithGemini, calculateMacrosForServing } from "./geminiFood";
 import { getLocalCachedFood, saveLocalCachedFood } from "./localFoodCache";
 import { searchOpenFoodFactsByName } from "./openFoodFacts";
+import { getMealGlucoseCorrelations } from "./db";
+import { computeRuleInsights } from "./ruleEngine";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
