@@ -296,30 +296,35 @@ WHERE [userId] = @userId
 }
 
 function resolveProfileTargets(profile: UserProfile): UserProfile {
-  const hasStoredTargets =
-    typeof profile.dailyCalorieTarget === "number" && profile.dailyCalorieTarget > 0 &&
-    typeof profile.dailyProteinTarget === "number" && profile.dailyProteinTarget > 0 &&
-    typeof profile.dailyCarbsTarget === "number" && profile.dailyCarbsTarget > 0 &&
-    typeof profile.dailyFatTarget === "number" && profile.dailyFatTarget > 0;
+  // Helper: return value only if it is a positive finite number, otherwise null.
+  const pos = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
 
-  if (hasStoredTargets) {
+  // If every target is already stored, return as-is — never overwrite saved values.
+  const storedCalories = pos(profile.dailyCalorieTarget);
+  const storedProtein  = pos(profile.dailyProteinTarget);
+  const storedCarbs    = pos(profile.dailyCarbsTarget);
+  const storedFat      = pos(profile.dailyFatTarget);
+
+  if (storedCalories !== null && storedProtein !== null && storedCarbs !== null && storedFat !== null) {
     return profile;
   }
 
+  // Some targets are missing — try to fill them in from biometrics.
   const hasBiometrics =
     typeof profile.weightLbs === "number" && profile.weightLbs > 0 &&
     typeof profile.heightIn === "number" && profile.heightIn > 0 &&
     typeof profile.ageYears === "number" && profile.ageYears > 0;
 
   const goal = (profile.fitnessGoal || "maintain") as FitnessGoal;
-  if (!hasBiometrics || !goal) {
+  if (!hasBiometrics) {
     return profile;
   }
 
   try {
     const weightLbs = profile.weightLbs as number;
-    const heightIn = profile.heightIn as number;
-    const ageYears = profile.ageYears as number;
+    const heightIn  = profile.heightIn as number;
+    const ageYears  = profile.ageYears as number;
 
     const weightKg = weightLbs * 0.453592;
     const heightCm = heightIn * 2.54;
@@ -333,12 +338,13 @@ function resolveProfileTargets(profile: UserProfile): UserProfile {
       profile.goalDate ?? undefined
     );
 
+    // Only fill in fields that are genuinely missing — preserve any that are already saved.
     return {
       ...profile,
-      dailyCalorieTarget: targets.dailyCalories,
-      dailyProteinTarget: targets.dailyProtein,
-      dailyCarbsTarget: targets.dailyCarbs,
-      dailyFatTarget: targets.dailyFat,
+      dailyCalorieTarget: storedCalories ?? targets.dailyCalories,
+      dailyProteinTarget: storedProtein  ?? targets.dailyProtein,
+      dailyCarbsTarget:   storedCarbs    ?? targets.dailyCarbs,
+      dailyFatTarget:     storedFat      ?? targets.dailyFat,
     };
   } catch {
     return profile;
