@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { Search, FileText, Barcode, Loader2, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { skipToken } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
+import { Html5Qrcode } from "html5-qrcode";
+import { toast } from "sonner";
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -19,6 +21,7 @@ interface AddFoodModalProps {
     proteinGrams: number;
     carbsGrams: number;
     fatGrams: number;
+    sugarGrams?: number;
   }) => void;
   mealType: "breakfast" | "lunch" | "dinner" | "snack" | "other";
 }
@@ -59,7 +62,7 @@ export function AddFoodModal({ isOpen, onClose, onFoodAdded, mealType }: AddFood
           </TabsContent>
 
           <TabsContent value="ai" className="space-y-4 mt-4">
-            <AIScannerTab />
+            <AIScannerTab onFoodAdded={onFoodAdded} onClose={onClose} />
           </TabsContent>
         </Tabs>
       </DialogContent>
@@ -71,6 +74,16 @@ interface SearchFoodTabProps {
   onFoodAdded: (food: any) => void;
   onClose: () => void;
   mealType?: string;
+}
+
+function parseServingSizeForInput(servingSize?: string): { amount: string; unit: "g" | "oz" } | null {
+  if (!servingSize) return null;
+  const match = servingSize.trim().match(/(\d+(?:\.\d+)?)\s*(g|gram|grams|oz|ounce|ounces)\b/i);
+  if (!match) return null;
+
+  const amount = match[1];
+  const unit = /^oz|ounce/i.test(match[2]) ? "oz" : "g";
+  return { amount, unit };
 }
 
 function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTabProps) {
@@ -108,6 +121,12 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
 
   const handleSelectFood = (food: any) => {
     setSelectedFood(food);
+    const parsedServing = parseServingSizeForInput(food?.servingSize);
+    if (parsedServing) {
+      setServingAmount(parsedServing.amount);
+      setServingUnit(parsedServing.unit);
+      return;
+    }
     setServingAmount("100");
     setServingUnit("g");
   };
@@ -129,17 +148,19 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="search-food">Search Foods with AI</Label>
+        <Label htmlFor="search-food">Search Foods</Label>
         <Input
           id="search-food"
-          placeholder="e.g., chicken, pasta, salmon, broccoli..."
+          placeholder="e.g., protein bar, greek yogurt, chicken breast..."
           value={searchQuery}
           onChange={(e) => { setSearchQuery(e.target.value); setSelectedFood(null); }}
           className="w-full"
           autoFocus
         />
         <p className="text-xs text-gray-500">
-          {debouncedQuery.trim().length <= 2 ? "Type at least 3 characters to search" : "Searching for food variations..."}
+          {debouncedQuery.trim().length <= 2
+            ? "Type at least 3 characters to search"
+            : "Searching OpenFoodFacts first, then online sources for top matches..."}
         </p>
       </div>
 
@@ -191,6 +212,9 @@ function SearchFoodTab({ onFoodAdded, onClose, mealType = "meal" }: SearchFoodTa
           <div>
             <h4 className="font-semibold text-sm mb-1">{selectedFood.name}</h4>
             <p className="text-xs text-gray-400">{selectedFood.description}</p>
+            {selectedFood.servingSize && (
+              <p className="text-xs text-gray-400 mt-1">Default serving: {selectedFood.servingSize}</p>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-2">
@@ -382,51 +406,253 @@ function ManualEntryTab({ onFoodAdded, onClose, mealType = "meal" }: ManualEntry
   );
 }
 
-function AIScannerTab() {
-  return (
-    <div className="space-y-8 text-center py-16">
-      {/* Barcode Icon with Enhanced Animation */}
-      <div className="flex justify-center">
-        <div className="relative group">
-          {/* Outer glow ring */}
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 rounded-full blur-2xl opacity-40 group-hover:opacity-60 animate-pulse transition-opacity duration-300"></div>
-          {/* Middle ring */}
-          <div className="absolute inset-2 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full blur-lg opacity-20 group-hover:opacity-30 transition-opacity duration-300"></div>
-          {/* Icon */}
-          <Barcode className="h-20 w-20 mx-auto text-blue-300 relative group-hover:text-cyan-300 transition-colors duration-300 drop-shadow-lg" />
-        </div>
-      </div>
+interface AIScannerTabProps {
+  onFoodAdded: (food: {
+    foodName: string;
+    servingSize: string;
+    calories: number;
+    proteinGrams: number;
+    carbsGrams: number;
+    fatGrams: number;
+    sugarGrams?: number;
+  }) => void;
+  onClose: () => void;
+}
 
-      {/* Title and Description */}
-      <div className="space-y-3 px-4">
-        <h4 className="font-bold text-xl text-white">AI Barcode Scanner</h4>
-        <p className="text-sm text-gray-300 max-w-sm mx-auto leading-relaxed">
-          Point your camera at a food barcode to instantly scan and auto-populate nutrition information with AI-powered accuracy.
+interface ScannerFoodCandidate {
+  foodName: string;
+  servingSize: string;
+  calories: number;
+  proteinGrams: number;
+  carbsGrams: number;
+  fatGrams: number;
+  sugarGrams: number;
+  sourceLabel: string;
+}
+
+function AIScannerTab({ onFoodAdded, onClose }: AIScannerTabProps) {
+  const utils = trpc.useUtils();
+  const scannerId = useId();
+  const readerElementId = useMemo(() => `food-barcode-reader-${scannerId.replace(/:/g, "")}`, [scannerId]);
+
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const [usdaQuery, setUsdaQuery] = useState("");
+  const [selectedFood, setSelectedFood] = useState<ScannerFoodCandidate | null>(null);
+
+  const { data: usdaResults, isLoading: usdaLoading } = trpc.food.searchUSDA.useQuery(
+    { query: usdaQuery },
+    { enabled: usdaQuery.trim().length > 2 }
+  );
+
+  useEffect(() => {
+    let scanner: Html5Qrcode | null = null;
+    let isMounted = true;
+
+    const normalizeBarcode = (raw: string): string | null => {
+      const matches = raw.match(/\d{8,14}/g);
+      if (!matches || matches.length === 0) return null;
+      return matches.sort((a, b) => b.length - a.length)[0];
+    };
+
+    const onScanSuccess = async (decodedText: string) => {
+      const normalizedBarcode = normalizeBarcode(decodedText);
+      if (!normalizedBarcode) {
+        if (isMounted) {
+          setScannerError("Scan detected, but no valid 8-14 digit barcode was found.");
+          toast.error("Invalid barcode format");
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setScanResult(normalizedBarcode);
+        setLookupLoading(true);
+        setScannerError(null);
+      }
+
+      try {
+        const product = await utils.food.lookupBarcode.fetch({ barcode: normalizedBarcode });
+
+        if (!isMounted) return;
+
+        if (product) {
+          setSelectedFood({
+            foodName: product.name,
+            servingSize: `${product.servingSize}${product.servingUnit}`,
+            calories: Number(product.calories) || 0,
+            proteinGrams: Number(product.protein) || 0,
+            carbsGrams: Number(product.carbs) || 0,
+            fatGrams: Number(product.fat) || 0,
+            sugarGrams: Number((product as any).sugar) || 0,
+            sourceLabel: `Open Food Facts (${normalizedBarcode})`,
+          });
+          toast.success(`Found product: ${product.name}`);
+        } else {
+          toast.info("No Open Food Facts match. Try USDA search below.");
+        }
+      } catch (_error) {
+        if (isMounted) {
+          setScannerError("Barcode lookup failed. You can still search USDA below.");
+          toast.error("Barcode lookup failed");
+        }
+      } finally {
+        if (isMounted) {
+          setLookupLoading(false);
+        }
+        if (scanner) {
+          await scanner.stop().catch(() => undefined);
+          scanner.clear();
+        }
+      }
+    };
+
+    const onScanFailure = () => {
+      // Keep scanner quiet during normal frame misses.
+    };
+
+    const startScanner = async () => {
+      scanner = new Html5Qrcode(readerElementId, { verbose: false });
+      const scanConfig = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+      };
+
+      try {
+        await scanner.start({ facingMode: "environment" }, scanConfig, onScanSuccess, onScanFailure);
+      } catch (_error) {
+        // Fallback for devices that don't expose an environment camera constraint.
+        try {
+          await scanner.start({ facingMode: "user" }, scanConfig, onScanSuccess, onScanFailure);
+        } catch (_fallbackError) {
+          if (isMounted) {
+            setScannerError("Unable to start camera scanner. Check camera permissions and reload.");
+            toast.error("Could not start camera scanner");
+          }
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      isMounted = false;
+      if (scanner) {
+        void scanner.stop().catch(() => undefined);
+        scanner.clear();
+      }
+    };
+  }, [readerElementId, utils.food.lookupBarcode]);
+
+  const handleUseUsdaResult = (food: any) => {
+    const servingSize = food.servingSize || "100g";
+    const servingUnit = food.servingUnit ? `${food.servingUnit}` : "";
+    setSelectedFood({
+      foodName: food.foodName || food.description || "USDA Food",
+      servingSize: `${servingSize}${servingUnit}`,
+      calories: Number(food.calories) || 0,
+      proteinGrams: Number(food.proteinGrams) || 0,
+      carbsGrams: Number(food.carbsGrams) || 0,
+      fatGrams: Number(food.fatGrams) || 0,
+      sugarGrams: Number((food as any).sugarGrams) || 0,
+      sourceLabel: "USDA FoodData Central",
+    });
+  };
+
+  const handleAddScannedFood = () => {
+    if (!selectedFood) return;
+    onFoodAdded({
+      foodName: selectedFood.foodName,
+      servingSize: selectedFood.servingSize,
+      calories: selectedFood.calories,
+      proteinGrams: selectedFood.proteinGrams,
+      carbsGrams: selectedFood.carbsGrams,
+      fatGrams: selectedFood.fatGrams,
+      sugarGrams: selectedFood.sugarGrams,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h4 className="font-semibold">Barcode Scanner</h4>
+        <p className="text-xs text-slate-400">
+          Scan package barcode to fetch product data from Open Food Facts. If not found, use USDA search.
         </p>
       </div>
 
-      {/* Coming Soon Card with Enhanced Design */}
-      <div className="bg-gradient-to-br from-blue-900/30 via-slate-900/20 to-cyan-900/30 rounded-xl p-6 border border-blue-500/30 hover:border-blue-400/50 transition-all duration-300 shadow-lg hover:shadow-blue-500/20">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold text-blue-300 flex items-center justify-center gap-2">
-            <span className="text-lg">✨</span>
-            Coming Soon
-          </p>
-          <p className="text-xs text-gray-400">This feature is currently in development and will be available in the next release.</p>
-          <p className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-700">
-            📸 Camera access • 🔍 Barcode recognition • 📊 Nutrition extraction
-          </p>
+      <div id={readerElementId} className="w-full overflow-hidden rounded-lg border border-slate-700" />
+
+      {lookupLoading && (
+        <div className="flex items-center gap-2 text-sm text-slate-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Looking up scanned barcode...
         </div>
+      )}
+
+      {scanResult && <p className="text-xs text-slate-400">Last scanned barcode: {scanResult}</p>}
+
+      {scannerError && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-md text-red-400">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span className="text-sm">{scannerError}</span>
+        </div>
+      )}
+
+      <div className="space-y-2 border-t border-slate-700 pt-4">
+        <Label htmlFor="usda-search">USDA fallback search</Label>
+        <Input
+          id="usda-search"
+          value={usdaQuery}
+          onChange={(e) => setUsdaQuery(e.target.value)}
+          placeholder="Search USDA foods if barcode lookup fails"
+        />
+        {usdaLoading && (
+          <div className="flex items-center gap-2 text-sm text-slate-300">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Searching USDA...
+          </div>
+        )}
+        {usdaResults && usdaResults.length > 0 && (
+          <div className="max-h-48 overflow-y-auto space-y-2 rounded border border-slate-700 p-2">
+            {usdaResults.map((food) => (
+              <button
+                key={food.fdcId}
+                type="button"
+                onClick={() => handleUseUsdaResult(food)}
+                className="w-full text-left p-2 rounded bg-slate-800/50 hover:bg-slate-700/50 transition-colors"
+              >
+                <p className="text-sm font-medium">{food.foodName}</p>
+                <p className="text-xs text-slate-400">
+                  {food.calories} cal | P {food.proteinGrams}g | C {food.carbsGrams}g | F {food.fatGrams}g | Sugar {(food as any).sugarGrams || 0}g
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Disabled Button with Enhanced Styling */}
-      <Button 
-        disabled 
-        className="w-full bg-gradient-to-r from-blue-600/20 to-cyan-600/20 hover:from-blue-600/30 hover:to-cyan-600/30 text-blue-300 border border-blue-500/40 rounded-lg font-medium transition-all duration-300 cursor-not-allowed opacity-75"
-      >
-        <Barcode className="h-4 w-4 mr-2" />
-        Enable Camera Scanner
-      </Button>
+      {selectedFood && (
+        <div className="space-y-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-4">
+          <div>
+            <p className="text-sm font-semibold text-white">{selectedFood.foodName}</p>
+            <p className="text-xs text-cyan-300">Source: {selectedFood.sourceLabel}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded bg-slate-900/60 p-2">Serving: {selectedFood.servingSize}</div>
+            <div className="rounded bg-slate-900/60 p-2">Calories: {selectedFood.calories}</div>
+            <div className="rounded bg-slate-900/60 p-2">Protein: {selectedFood.proteinGrams}g</div>
+            <div className="rounded bg-slate-900/60 p-2">Carbs: {selectedFood.carbsGrams}g</div>
+            <div className="rounded bg-slate-900/60 p-2">Fat: {selectedFood.fatGrams}g</div>
+            <div className="rounded bg-slate-900/60 p-2">Sugar: {selectedFood.sugarGrams}g</div>
+          </div>
+          <Button onClick={handleAddScannedFood} className="w-full bg-cyan-600 hover:bg-cyan-700">
+            Add Food
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

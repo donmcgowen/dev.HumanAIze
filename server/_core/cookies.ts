@@ -39,10 +39,15 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  const shouldUseSecureCookie =
+    isSecureRequest(req) || process.env.NODE_ENV === "production";
+
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
-    secure: isSecureRequest(req),
+    // Lax is appropriate for this same-site app and avoids browser rejections
+    // when Secure is not inferred correctly behind proxies.
+    sameSite: "lax",
+    secure: shouldUseSecureCookie,
   };
 }

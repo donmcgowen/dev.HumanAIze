@@ -196,6 +196,9 @@ export const userProfiles = mysqlTable("user_profiles", {
   dailyProteinTarget: int("dailyProteinTarget"),
   dailyCarbsTarget: int("dailyCarbsTarget"),
   dailyFatTarget: int("dailyFatTarget"),
+  cgmAverageGlucose: int("cgmAverageGlucose"),
+  cgmTimeInRange: double("cgmTimeInRange"),
+  cgmA1cEstimate: double("cgmA1cEstimate"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -328,6 +331,22 @@ export const weightEntries = mysqlTable("weight_entries", {
 
 export type WeightEntry = typeof weightEntries.$inferSelect;
 export type InsertWeightEntry = typeof weightEntries.$inferInsert;
+
+export const workoutEntries = mysqlTable("workout_entries", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().references(() => users.id),
+  exerciseName: varchar("exerciseName", { length: 191 }).notNull(),
+  exerciseType: varchar("exerciseType", { length: 64 }).notNull(),
+  durationMinutes: int("durationMinutes").notNull(),
+  caloriesBurned: int("caloriesBurned").default(0).notNull(),
+  intensity: varchar("intensity", { length: 32 }).default("moderate").notNull(),
+  notes: text("notes"),
+  recordedAt: bigint("recordedAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type WorkoutEntry = typeof workoutEntries.$inferSelect;
+export type InsertWorkoutEntry = typeof workoutEntries.$inferInsert;
 
 export const bodyMeasurements = mysqlTable("body_measurements", {
   id: int("id").autoincrement().primaryKey(),

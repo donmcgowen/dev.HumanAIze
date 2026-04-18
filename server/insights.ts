@@ -28,6 +28,15 @@ export interface DailyMacros {
   fatRemaining: number;
 }
 
+export interface GlucoseContext {
+  average: number;
+  a1cEstimate: number;
+  timeInRange: number;
+  timeAboveRange: number;
+  timeBelowRange: number;
+  latestReading?: number | null;
+}
+
 export interface InsightRecommendation {
   category: "food_choice" | "portion_size" | "macro_balance" | "meal_timing";
   title: string;
@@ -39,10 +48,20 @@ export interface InsightRecommendation {
 export async function generateFoodInsights(
   foodLogs: FoodLog[],
   userProfile: UserProfile,
-  currentMacros: DailyMacros
+  currentMacros: DailyMacros,
+  glucoseContext?: GlucoseContext | null
 ): Promise<InsightRecommendation[]> {
   const mealSummary = summarizeMeals(foodLogs);
   const macroStatus = analyzeMacroStatus(currentMacros, userProfile);
+  const glucoseSummary = glucoseContext
+    ? `\nRecent Glucose Context (from imported/synced CGM data):
+- Average Glucose: ${glucoseContext.average} mg/dL
+- A1C Estimate: ${glucoseContext.a1cEstimate}%
+- Time in Range (70-180): ${glucoseContext.timeInRange}%
+- Time Above Range: ${glucoseContext.timeAboveRange}%
+- Time Below Range: ${glucoseContext.timeBelowRange}%
+- Latest Reading: ${glucoseContext.latestReading ?? "N/A"} mg/dL`
+    : "\nRecent Glucose Context: Not available";
 
   const prompt = `You are a nutrition coach analyzing a user's food intake for the day.
 
@@ -63,12 +82,13 @@ Current Macro Status:
 - Fat: ${currentMacros.totalFat}/${userProfile.dailyFatGoal}g (${currentMacros.fatRemaining}g remaining)
 
 Macro Analysis: ${macroStatus}
+${glucoseSummary}
 
 Based on this data, provide 2-4 actionable nutrition recommendations in JSON format. Focus on:
 1. Food choices that would better align with their goals
 2. Portion size adjustments if needed
 3. Macro balance improvements
-4. Meal timing or distribution suggestions
+4. Meal timing or distribution suggestions using glucose patterns when available
 
 Return ONLY valid JSON array with this structure:
 [

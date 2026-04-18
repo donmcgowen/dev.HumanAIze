@@ -4,8 +4,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Sidebar,
   SidebarContent,
@@ -21,20 +31,21 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { Activity, Bot, Cable, LayoutDashboard, LineChart, LogOut, Mail, User, Apple, Dumbbell, HelpCircle, TrendingUp } from "lucide-react";
 import type { ReactNode } from "react";
-  import { useEffect } from "react";
-  import { useLocation } from "wouter";
+import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { toast } from "sonner";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Command Center", path: "/dashboard" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: LineChart, label: "History", path: "/history" },
   { icon: Cable, label: "Monitoring", path: "/monitoring" },
   { icon: Apple, label: "Food Logging", path: "/food-logging" },
   { icon: Dumbbell, label: "Workouts", path: "/workouts" },
   { icon: TrendingUp, label: "Progress", path: "/progress" },
-  { icon: User, label: "Profile", path: "/profile" },
   { icon: Bot, label: "Assistant", path: "/assistant" },
   { icon: Mail, label: "Weekly Summaries", path: "/summaries" },
   { icon: HelpCircle, label: "Help", path: "/help" },
@@ -93,8 +104,23 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
 function DashboardLayoutContent({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const utils = trpc.useUtils();
+  const updateEmailMutation = trpc.auth.updateEmail.useMutation();
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState(user?.email ?? "");
   const [location, setLocation] = useLocation();
   const { setOpen, isMobile } = useSidebar();
+  const normalizedCurrentEmail = (user?.email ?? "").trim().toLowerCase();
+  const normalizedDraftEmail = emailDraft.trim().toLowerCase();
+  const isEmailChanged = normalizedDraftEmail !== normalizedCurrentEmail;
+  const isEmailFormatValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailDraft.trim());
+  const emailValidationMessage = !emailDraft.trim()
+    ? "Email is required"
+    : !isEmailFormatValid
+      ? "Enter a valid email address"
+      : !isEmailChanged
+        ? "Enter a different email address"
+        : null;
 
   // Auto-collapse sidebar when location changes on desktop
   useEffect(() => {
@@ -102,6 +128,23 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
       setOpen(false);
     }
   }, [location, isMobile, setOpen]);
+
+  const handleUpdateEmail = async () => {
+    const trimmedEmail = emailDraft.trim();
+    if (emailValidationMessage) {
+      toast.error(emailValidationMessage);
+      return;
+    }
+
+    try {
+      await updateEmailMutation.mutateAsync({ email: trimmedEmail });
+      await utils.auth.me.invalidate();
+      toast.success("Email updated successfully");
+      setIsEmailDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update email");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -149,12 +192,27 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-white">{user?.name ?? "User"}</p>
+                  <p className="truncate text-sm font-semibold text-white">User Profile</p>
                   <p className="truncate text-xs text-slate-400">{user?.email ?? "Authenticated account"}</p>
                 </div>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52 rounded-none border-white/10 bg-slate-950 text-white">
+              <DropdownMenuItem className="cursor-pointer rounded-none" onClick={() => setLocation("/profile")}>
+                <User className="mr-2 h-4 w-4" />
+                Update profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer rounded-none"
+                onClick={() => {
+                  setEmailDraft(user?.email ?? "");
+                  setIsEmailDialogOpen(true);
+                }}
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                Update email address
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/10" />
               <DropdownMenuItem className="cursor-pointer rounded-none text-red-300 focus:bg-red-500/10 focus:text-red-200" onClick={logout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
@@ -164,17 +222,60 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
         </SidebarFooter>
       </Sidebar>
 
+      <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
+        <DialogContent className="rounded-none border-white/10 bg-slate-950 text-white">
+          <DialogHeader>
+            <DialogTitle>Update Email Address</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Change the email address associated with your account.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Input
+              type="email"
+              value={emailDraft}
+              onChange={(e) => setEmailDraft(e.target.value)}
+              placeholder="name@example.com"
+              className="rounded-none border-white/10 bg-slate-900 text-white placeholder:text-slate-500"
+            />
+            {emailValidationMessage && (
+              <p className="text-xs text-red-300">{emailValidationMessage}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-none border-white/20 bg-transparent text-white hover:bg-white/10"
+              onClick={() => setIsEmailDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-none bg-cyan-500 text-white hover:bg-cyan-600"
+              onClick={handleUpdateEmail}
+              disabled={updateEmailMutation.isPending || Boolean(emailValidationMessage)}
+            >
+              {updateEmailMutation.isPending ? "Saving..." : "Save Email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <SidebarInset className="bg-transparent">
         <div className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/10 bg-background/85 px-4 backdrop-blur md:px-6">
           <div className="flex items-center gap-3">
             <SidebarTrigger className="rounded-none border border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" />
             <div>
               <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Protected dashboard</p>
-              <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-white">Personal health intelligence</h1>
+              <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-white">HumanAIze Life</h1>
             </div>
           </div>
           <div className="hidden border border-cyan-300/20 bg-cyan-300/5 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-100 md:block">
-            Engineering-style unified analytics workspace
+            HumanAIze Life
           </div>
         </div>
         <main className="min-h-[calc(100vh-4rem)] p-4 md:p-6 w-full overflow-x-auto">{children}</main>

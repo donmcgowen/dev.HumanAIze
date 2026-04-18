@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,15 @@ export function ProgressPhotos() {
   const uploadMutation = trpc.progressPhotos.uploadPhoto.useMutation();
   const deleteMutation = trpc.progressPhotos.deletePhoto.useMutation();
 
+  const sortedPhotos = useMemo(() => {
+    if (!photos) return [];
+    return [...photos].sort((a, b) => {
+      const dateDiff = Number(b.photoDate) - Number(a.photoDate);
+      if (dateDiff !== 0) return dateDiff;
+      return b.id - a.id;
+    });
+  }, [photos]);
+
   // Start camera
   const startCamera = async () => {
     try {
@@ -45,13 +54,15 @@ export function ProgressPhotos() {
   };
 
   // Stop camera
-  const stopCamera = () => {
+  const stopCamera = (clearCapturedPhoto = true) => {
     if (cameraStream) {
       cameraStream.getTracks().forEach((track) => track.stop());
       setCameraStream(null);
     }
     setShowCamera(false);
-    setCapturedPhoto(null);
+    if (clearCapturedPhoto) {
+      setCapturedPhoto(null);
+    }
   };
 
   // Capture photo from camera
@@ -64,7 +75,12 @@ export function ProgressPhotos() {
         context.drawImage(videoRef.current, 0, 0);
         const photoData = canvasRef.current.toDataURL("image/jpeg");
         setCapturedPhoto(photoData);
-        stopCamera();
+        // Stop camera stream but keep captured photo for save preview.
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          setCameraStream(null);
+        }
+        setShowCamera(true);
       }
     }
   };
@@ -92,7 +108,11 @@ export function ProgressPhotos() {
 
     try {
       const base64Data = capturedPhoto.split(",")[1] || capturedPhoto;
-      const photoTimestamp = new Date(photoDate).getTime();
+      const photoTimestamp = new Date(`${photoDate}T00:00:00`).getTime();
+      if (!Number.isFinite(photoTimestamp)) {
+        toast.error("Please choose a valid photo date");
+        return;
+      }
 
       await uploadMutation.mutateAsync({
         photoBase64: base64Data,
@@ -109,9 +129,18 @@ export function ProgressPhotos() {
       utils.progressPhotos.getPhotos.invalidate();
     } catch (error) {
       console.error("Error saving photo:", error);
-      toast.error("Failed to save photo");
+      const message = error instanceof Error ? error.message : "Failed to save photo";
+      toast.error(message);
     }
   };
+
+  useEffect(() => {
+    if (!showAddModal) {
+      stopCamera(true);
+      setPhotoName("");
+      setPhotoDate(new Date().toISOString().split("T")[0]);
+    }
+  }, [showAddModal]);
 
   // Delete photo
   const deletePhoto = async (photoId: number) => {
@@ -147,9 +176,9 @@ export function ProgressPhotos() {
         <div className="flex items-center justify-center py-8">
           <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
         </div>
-      ) : photos && photos.length > 0 ? (
+      ) : sortedPhotos.length > 0 ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {photos.map((photo: typeof photos[0]) => (
+          {sortedPhotos.map((photo) => (
             <div
               key={photo.id}
               className="group relative overflow-hidden rounded-lg bg-slate-800 cursor-pointer transition-transform hover:scale-105"
@@ -233,7 +262,15 @@ export function ProgressPhotos() {
       </Dialog>
 
       {/* Add Photo Modal */}
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+      <Dialog
+        open={showAddModal}
+        onOpenChange={(open) => {
+          if (!open) {
+            stopCamera(true);
+          }
+          setShowAddModal(open);
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add Progress Photo</DialogTitle>
@@ -346,7 +383,7 @@ export function ProgressPhotos() {
 
               <div className="flex gap-2">
                 <Button
-                  onClick={stopCamera}
+                  onClick={() => stopCamera(true)}
                   variant="outline"
                   className="flex-1"
                 >

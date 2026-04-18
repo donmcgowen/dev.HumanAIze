@@ -41,6 +41,31 @@ export function FoodInsights({
   const carbsPercent = Math.round((currentCarbs / dailyCarbGoal) * 100);
   const fatPercent = Math.round((currentFat / dailyFatGoal) * 100);
 
+  const caloriesRemaining = Math.max(0, dailyCalorieGoal - currentCalories);
+  const proteinRemaining = Math.max(0, dailyProteinGoal - currentProtein);
+  const carbsRemaining = Math.max(0, dailyCarbGoal - currentCarbs);
+  const fatRemaining = Math.max(0, dailyFatGoal - currentFat);
+
+  const mealsLeft = currentCalories < dailyCalorieGoal * 0.33 ? 3 : currentCalories < dailyCalorieGoal * 0.66 ? 2 : 1;
+
+  const nextMealTargets = {
+    calories: Math.max(0, Math.round(caloriesRemaining / mealsLeft)),
+    protein: Math.max(0, Math.round((proteinRemaining / mealsLeft) * 10) / 10),
+    carbs: Math.max(0, Math.round((carbsRemaining / mealsLeft) * 10) / 10),
+    fat: Math.max(0, Math.round((fatRemaining / mealsLeft) * 10) / 10),
+  };
+
+  const approachingMessages: string[] = [];
+  if (caloriePercent >= 90 && caloriePercent < 100) approachingMessages.push("You are approaching your daily calorie target.");
+  if (proteinPercent >= 90 && proteinPercent < 100) approachingMessages.push("You are approaching your daily protein target.");
+  if (carbsPercent >= 90 && carbsPercent < 100) approachingMessages.push("You are approaching your daily carbs target.");
+  if (fatPercent >= 90 && fatPercent < 100) approachingMessages.push("You are approaching your daily fat target.");
+
+  if (caloriePercent >= 100) approachingMessages.push("You are at or above your daily calorie target.");
+  if (proteinPercent >= 100) approachingMessages.push("You are at or above your daily protein target.");
+  if (carbsPercent >= 100) approachingMessages.push("You are at or above your daily carbs target.");
+  if (fatPercent >= 100) approachingMessages.push("You are at or above your daily fat target.");
+
   const getProgressColor = (percent: number) => {
     if (percent >= 100) return "bg-red-500";
     if (percent >= 85) return "bg-yellow-500";
@@ -148,6 +173,44 @@ export function FoodInsights({
         </div>
 
         {/* AI Recommendations */}
+        <div className="border-t border-white/10 pt-4 space-y-4">
+          <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
+            <h4 className="text-sm font-semibold text-cyan-200 mb-2">AI Target Comparison</h4>
+            <p className="text-xs text-slate-300 mb-3">
+              Recommended next meal target: {nextMealTargets.calories} calories, {nextMealTargets.carbs.toFixed(0)}g carbs, {nextMealTargets.protein.toFixed(0)}g protein, {nextMealTargets.fat.toFixed(0)}g fat.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <div className="rounded bg-white/5 p-2">
+                <div className="text-slate-400">Remaining Calories</div>
+                <div className="font-semibold text-white">{Math.round(caloriesRemaining)}</div>
+              </div>
+              <div className="rounded bg-white/5 p-2">
+                <div className="text-slate-400">Remaining Protein</div>
+                <div className="font-semibold text-white">{proteinRemaining.toFixed(1)}g</div>
+              </div>
+              <div className="rounded bg-white/5 p-2">
+                <div className="text-slate-400">Remaining Carbs</div>
+                <div className="font-semibold text-white">{carbsRemaining.toFixed(1)}g</div>
+              </div>
+              <div className="rounded bg-white/5 p-2">
+                <div className="text-slate-400">Remaining Fat</div>
+                <div className="font-semibold text-white">{fatRemaining.toFixed(1)}g</div>
+              </div>
+            </div>
+          </div>
+
+          {approachingMessages.length > 0 && (
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+              <h5 className="text-sm font-semibold text-amber-200 mb-2">Target Alerts</h5>
+              <div className="space-y-1">
+                {approachingMessages.map((message, idx) => (
+                  <p key={idx} className="text-xs text-slate-300">- {message}</p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="border-t border-white/10 pt-4">
           <h4 className="text-sm font-semibold text-white mb-3">Recommendations</h4>
 
@@ -190,10 +253,10 @@ export function FoodInsights({
         {/* Meal Suggestions */}
         <div className="border-t border-white/10 pt-4">
           <MealSuggestions
-            caloriesRemaining={Math.max(0, dailyCalorieGoal - currentCalories)}
-            proteinRemaining={Math.max(0, dailyProteinGoal - currentProtein)}
-            carbsRemaining={Math.max(0, dailyCarbGoal - currentCarbs)}
-            fatRemaining={Math.max(0, dailyFatGoal - currentFat)}
+            caloriesRemaining={caloriesRemaining}
+            proteinRemaining={proteinRemaining}
+            carbsRemaining={carbsRemaining}
+            fatRemaining={fatRemaining}
           />
         </div>
 

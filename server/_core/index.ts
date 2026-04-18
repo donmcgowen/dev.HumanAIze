@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import compression from "compression";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -8,6 +9,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { startBackgroundSync } from "../backgroundSync";
+import { getDatabaseHealth } from "../db";
+import { getAuthBackendHealth } from "../auth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,9 +34,31 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  const dbHealth = await getDatabaseHealth();
+  console.log(
+    `[Startup] Database health: ok=${dbHealth.ok} reason=${dbHealth.reason} source=${dbHealth.diagnostics.source}`
+  );
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(compression());
+
+  app.get("/api/healthz", (_req, res) => {
+    res.status(200).json({ ok: true, service: "humanaize-api" });
+  });
+
+  app.get("/api/healthz/db", async (_req, res) => {
+    const health = await getDatabaseHealth();
+    res.status(health.ok ? 200 : 503).json(health);
+  });
+
+  app.get("/api/healthz/auth", async (_req, res) => {
+    const health = await getAuthBackendHealth();
+    res.status(health.ok ? 200 : 503).json(health);
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // tRPC API
@@ -51,10 +76,14 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const defaultPort = process.env.NODE_ENV === "production" ? "8080" : "3000";
+  const preferredPort = parseInt(process.env.PORT ?? defaultPort, 10);
+  const port =
+    process.env.NODE_ENV === "production"
+      ? preferredPort
+      : await findAvailablePort(preferredPort);
 
-  if (port !== preferredPort) {
+  if (process.env.NODE_ENV !== "production" && port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 

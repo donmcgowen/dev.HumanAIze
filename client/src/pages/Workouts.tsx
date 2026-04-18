@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { InsightsPanel } from "@/components/InsightsPanel";
 import { toast } from "sonner";
-import { Loader2, Trash2, Plus } from "lucide-react";
+import { Loader2, Trash2, Plus, Mic, MicOff, Sparkles } from "lucide-react";
+
+type WorkoutIntensity = "light" | "moderate" | "intense";
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
+}
 
 const EXERCISE_TYPES = [
   { name: "Cardio", examples: "Running, Cycling, Swimming, HIIT" },
@@ -19,13 +41,71 @@ const EXERCISE_TYPES = [
 
 export function Workouts() {
   const { data: user, isLoading } = trpc.auth.me.useQuery();
+  const utils = trpc.useUtils();
   const [formData, setFormData] = useState({
     exerciseName: "",
     exerciseType: "Cardio",
     durationMinutes: "",
     caloriesBurned: "",
-    intensity: "moderate",
+    intensity: "moderate" as WorkoutIntensity,
     notes: "",
+  });
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+
+  const speechSupported = useMemo(
+    () => Boolean(window.SpeechRecognition || window.webkitSpeechRecognition),
+    []
+  );
+
+  const { data: workoutEntries = [] } = trpc.workouts.getEntries.useQuery({ days: 60 }, { enabled: !!user });
+  const { data: recommendations = [] } = trpc.workouts.getDailyRecommendations.useQuery(undefined, { enabled: !!user });
+
+  const addWorkoutMutation = trpc.workouts.addEntry.useMutation({
+    onSuccess: () => {
+      toast.success("Workout logged successfully!");
+      setFormData({
+        exerciseName: "",
+        exerciseType: "Cardio",
+        durationMinutes: "",
+        caloriesBurned: "",
+        intensity: "moderate",
+        notes: "",
+      });
+      setVoiceTranscript("");
+      utils.workouts.getEntries.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to save workout");
+    },
+  });
+
+  const deleteWorkoutMutation = trpc.workouts.deleteEntry.useMutation({
+    onSuccess: () => {
+      toast.success("Workout deleted");
+      utils.workouts.getEntries.invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete workout");
+    },
+  });
+
+  const estimateFromTextMutation = trpc.workouts.estimateFromText.useMutation({
+    onSuccess: (result) => {
+      setFormData((prev) => ({
+        ...prev,
+        exerciseName: result.exerciseName,
+        exerciseType: result.exerciseType,
+        durationMinutes: String(result.durationMinutes),
+        caloriesBurned: String(result.caloriesBurned),
+        intensity: result.intensity,
+      }));
+
+      toast.success(result.usedFallback ? "Workout parsed with fallback estimate" : "AI estimated workout calories");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to estimate calories");
+    },
   });
 
   if (isLoading || !user) {
@@ -45,6 +125,39 @@ export function Workouts() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const startVoiceCapture = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Voice input is not supported in this browser.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    setIsRecording(true);
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim() || "";
+      setVoiceTranscript(transcript);
+      if (transcript.length > 0) {
+        estimateFromTextMutation.mutate({ transcript });
+      }
+    };
+
+    recognition.onerror = (event) => {
+      toast.error(`Voice capture failed: ${event.error}`);
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+    };
+
+    recognition.start();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -53,14 +166,13 @@ export function Workouts() {
       return;
     }
 
-    toast.success("Workout logged successfully!");
-    setFormData({
-      exerciseName: "",
-      exerciseType: "Cardio",
-      durationMinutes: "",
-      caloriesBurned: "",
-      intensity: "moderate",
-      notes: "",
+    addWorkoutMutation.mutate({
+      exerciseName: formData.exerciseName,
+      exerciseType: formData.exerciseType,
+      durationMinutes: Math.max(1, Number(formData.durationMinutes)),
+      caloriesBurned: formData.caloriesBurned ? Math.max(0, Number(formData.caloriesBurned)) : 0,
+      intensity: formData.intensity,
+      notes: formData.notes || undefined,
     });
   };
 
@@ -77,9 +189,45 @@ export function Workouts() {
           <Card className="border border-white/10 bg-slate-950">
             <CardHeader>
               <CardTitle className="text-white">Log Workout</CardTitle>
-              <CardDescription>Record your exercise session</CardDescription>
+              <CardDescription>
+                Record your exercise session, or use voice input like "I did 35 minutes of cycling"
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    onClick={startVoiceCapture}
+                    disabled={!speechSupported || isRecording || estimateFromTextMutation.isPending}
+                    className="bg-cyan-600 hover:bg-cyan-700 text-white"
+                  >
+                    {isRecording ? (
+                      <>
+                        <MicOff className="w-4 h-4 mr-2" />
+                        Listening...
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-4 h-4 mr-2" />
+                        Use Voice Input
+                      </>
+                    )}
+                  </Button>
+                  {!speechSupported && (
+                    <span className="text-xs text-slate-300">Browser does not support speech recognition.</span>
+                  )}
+                </div>
+                {voiceTranscript && (
+                  <p className="text-sm text-slate-200">
+                    Heard: <span className="text-cyan-300">{voiceTranscript}</span>
+                  </p>
+                )}
+                <p className="text-xs text-slate-300">
+                  Hint: try saying "45 minutes intense cycling" or "30 minutes light yoga".
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="exerciseName" className="text-slate-300">
@@ -182,25 +330,52 @@ export function Workouts() {
 
               <Button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-semibold">
                 <Plus className="w-4 h-4 mr-2" />
-                Log Workout
+                {addWorkoutMutation.isPending ? "Saving..." : "Log Workout"}
               </Button>
             </CardContent>
           </Card>
 
-          {/* Insights Section */}
+          {/* AI Workout Recommendations */}
+          <Card className="border border-white/10 bg-slate-950">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-cyan-400" />
+                AI Workout Recommendations
+              </CardTitle>
+              <CardDescription>Suggested for today based on your profile goals</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {recommendations.length === 0 ? (
+                <p className="text-slate-400">No recommendations yet. Update your profile goals to get better suggestions.</p>
+              ) : (
+                <div className="space-y-3">
+                  {recommendations.map((item, idx) => (
+                    <div key={`${item.title}-${idx}`} className="p-3 rounded-lg bg-slate-900 border border-white/10">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-semibold text-cyan-300">{item.title}</p>
+                        <p className="text-xs text-slate-400">{item.durationMinutes} min • {item.intensity}</p>
+                      </div>
+                      <p className="text-sm text-slate-300 mt-1">{item.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <InsightsPanel 
             insights={[
               {
                 type: "tip" as const,
-                title: "Start Your Fitness Journey",
-                description: "Log your first workout to track your exercise consistency and progress toward your goals.",
-                action: "Begin with a workout type that matches your current fitness level."
+                title: "Voice + AI Workflow",
+                description: "Use voice input to quickly fill workout details and calories burned estimates.",
+                action: "Say phrases like '45 minutes intense HIIT' and review before saving."
               },
               {
                 type: "tip" as const,
-                title: "Recovery Matters",
-                description: "Combine your workout data with sleep tracking for optimal recovery and performance.",
-                action: "Connect an Oura Ring or similar device to monitor sleep quality."
+                title: "Consistency Wins",
+                description: "Short daily sessions are often better than long inconsistent sessions.",
+                action: "Aim for at least 20-30 minutes of intentional movement today."
               }
             ]}
           />
@@ -222,14 +397,41 @@ export function Workouts() {
             </CardContent>
           </Card>
 
-          {/* Placeholder for Workout History */}
+          {/* Workout History */}
           <Card className="border border-white/10 bg-slate-950">
             <CardHeader>
               <CardTitle className="text-white">Recent Workouts</CardTitle>
-              <CardDescription>Your workout history will appear here</CardDescription>
+              <CardDescription>Latest saved workout sessions</CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-slate-400 text-center py-8">No workouts logged yet. Start by logging your first workout above!</p>
+              {workoutEntries.length === 0 ? (
+                <p className="text-slate-400 text-center py-8">No workouts logged yet. Start by logging your first workout above!</p>
+              ) : (
+                <div className="space-y-2">
+                  {workoutEntries.map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900 p-3">
+                      <div>
+                        <p className="font-semibold text-white">{entry.exerciseName}</p>
+                        <p className="text-xs text-slate-400">
+                          {entry.exerciseType} • {entry.durationMinutes} min • {entry.caloriesBurned} kcal • {entry.intensity}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">{new Date(entry.recordedAt).toLocaleString()}</p>
+                        {entry.notes && <p className="text-xs text-slate-300 mt-1">{entry.notes}</p>}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={deleteWorkoutMutation.isPending}
+                        onClick={() => deleteWorkoutMutation.mutate({ entryId: entry.id })}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </form>

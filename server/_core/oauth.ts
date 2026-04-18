@@ -2,7 +2,7 @@ import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
-import { sdk } from "./sdk";
+import { sdk, buildB2CAuthorizeUrl, exchangeB2CCode, parseB2CIdToken } from "./sdk";
 import { ENV } from "./env";
 
 function getQueryParam(req: Request, key: string): string | undefined {
@@ -10,35 +10,35 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-function getCurrentOrigin(req: Request) {
+function getRedirectUri(req: Request): string {
   const forwardedProto = req.headers["x-forwarded-proto"];
-  const protocol = typeof forwardedProto === "string" ? forwardedProto.split(",")[0] : req.protocol;
-  const host = req.get("host");
-  return `${protocol}://${host}`;
+  const protocol =
+    typeof forwardedProto === "string" ? forwardedProto.split(",")[0].trim() : req.protocol;
+  return `${protocol}://${req.get("host")}/api/oauth/callback`;
 }
 
-function buildOAuthRedirectUrl(req: Request) {
-  const oauthPortalUrl = ENV.oAuthServerUrl;
-  const appId = ENV.appId;
-
-  if (!oauthPortalUrl || !appId) {
-    throw new Error("OAuth portal URL and app ID must be configured in environment variables.");
+function buildAuthorizeUrl(req: Request): string {
+  if (!ENV.azureAdTenant || !ENV.azureAdClientId) {
+    throw new Error(
+      "Azure AD is not configured. Set AZURE_AD_TENANT and AZURE_AD_CLIENT_ID."
+    );
   }
-
-  const redirectUri = `${getCurrentOrigin(req)}/api/oauth/callback`;
+  const redirectUri = getRedirectUri(req);
   const state = Buffer.from(redirectUri).toString("base64");
-  const authUrl = new URL(`${oauthPortalUrl.replace(/\/$/, "")}/app-auth`);
-  authUrl.searchParams.set("appId", appId);
-  authUrl.searchParams.set("redirectUri", redirectUri);
-  authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("type", "signIn");
-
-  return authUrl.toString();
+  return buildB2CAuthorizeUrl(redirectUri, state);
 }
 
 async function handleOAuthCallback(req: Request, res: Response) {
   const code = getQueryParam(req, "code");
   const state = getQueryParam(req, "state");
+  const errorParam = getQueryParam(req, "error");
+
+  if (errorParam) {
+    const desc = getQueryParam(req, "error_description") ?? errorParam;
+    console.error("[OAuth] B2C returned error:", desc);
+    res.status(400).json({ error: desc });
+    return;
+  }
 
   if (!code || !state) {
     res.status(400).json({ error: "code and state are required" });
@@ -46,11 +46,12 @@ async function handleOAuthCallback(req: Request, res: Response) {
   }
 
   try {
-    const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-    const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+    const redirectUri = Buffer.from(state, "base64").toString("utf8");
+    const tokens = await exchangeB2CCode(code, redirectUri);
+    const userInfo = parseB2CIdToken(tokens.id_token);
 
     if (!userInfo.openId) {
-      res.status(400).json({ error: "openId missing from user info" });
+      res.status(400).json({ error: "openId (oid) missing from B2C id_token" });
       return;
     }
 
@@ -58,7 +59,7 @@ async function handleOAuthCallback(req: Request, res: Response) {
       openId: userInfo.openId,
       name: userInfo.name || null,
       email: userInfo.email ?? null,
-      loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+      loginMethod: userInfo.loginMethod,
       lastSignedIn: new Date(),
     });
 
@@ -69,10 +70,9 @@ async function handleOAuthCallback(req: Request, res: Response) {
 
     const cookieOptions = getSessionCookieOptions(req);
     res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-
     res.redirect(302, "/");
   } catch (error) {
-    console.error("[OAuth] Callback failed", error);
+    console.error("[OAuth] B2C callback failed", error);
     res.status(500).json({ error: "OAuth callback failed" });
   }
 }
@@ -80,7 +80,7 @@ async function handleOAuthCallback(req: Request, res: Response) {
 export function registerOAuthRoutes(app: Express) {
   app.get("/api/oauth/start", (req: Request, res: Response) => {
     try {
-      const authUrl = buildOAuthRedirectUrl(req);
+      const authUrl = buildAuthorizeUrl(req);
       res.redirect(302, authUrl);
     } catch (error) {
       console.error("[OAuth] Start failed", error);

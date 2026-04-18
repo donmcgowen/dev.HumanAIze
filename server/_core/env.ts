@@ -1,15 +1,33 @@
 export const ENV = {
+  // Azure AD (Entra ID)
+  azureAdTenant: process.env.AZURE_AD_TENANT ?? "",           // e.g. "themcgowengroup.onmicrosoft.com"
+  azureAdClientId: process.env.AZURE_AD_CLIENT_ID ?? "",      // app registration client ID
+  azureAdClientSecret: process.env.AZURE_AD_CLIENT_SECRET ?? "", // client secret value
+
+  // App
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "",
-  databaseUrl: (process.env.AZURE_SQL_CONNECTION_STRING || process.env.DATABASE_URL) ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   isProduction: process.env.NODE_ENV === "production",
+
+  // LLM
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
+
+  // Azure infrastructure
   azureStorageAccountName: process.env.AZURE_STORAGE_ACCOUNT_NAME ?? "",
   azureStorageContainerName: process.env.AZURE_STORAGE_CONTAINER_NAME ?? "",
   azureStorageAccountKey: process.env.AZURE_STORAGE_ACCOUNT_KEY ?? "",
   azureSqlConnectionString: process.env.AZURE_SQL_CONNECTION_STRING ?? "",
+  databaseUrl: (process.env.DATABASE_URL || process.env.AZURE_SQL_CONNECTION_STRING) ?? "",
+
+  // Open Food Facts
+  openFoodFactsEnvironment: process.env.OPENFOODFACTS_ENVIRONMENT ?? "production", // production | staging
+  openFoodFactsBaseUrl: process.env.OPENFOODFACTS_BASE_URL ?? "",
+  openFoodFactsUserAgent:
+    process.env.OPENFOODFACTS_USER_AGENT ?? "HumanAIze/1.0 (support@humanaize.life)",
+  openFoodFactsStagingUsername: process.env.OPENFOODFACTS_STAGING_USERNAME ?? "off",
+  openFoodFactsStagingPassword: process.env.OPENFOODFACTS_STAGING_PASSWORD ?? "off",
 };
 

@@ -1,21 +1,113 @@
 import { and, eq, gte, lte, lt, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading, activitySamples, weightEntries, InsertWeightEntry, WeightEntry, bodyMeasurements, InsertBodyMeasurement, BodyMeasurement } from "../drizzle/schema";
+import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading, activitySamples, weightEntries, InsertWeightEntry, WeightEntry, workoutEntries, InsertWorkoutEntry, WorkoutEntry, bodyMeasurements, InsertBodyMeasurement, BodyMeasurement } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { getAzureSqlPool } from "./azureDb";
+import { calculateMacroTargets, calculateTDEE, type FitnessGoal } from "./fitnessGoal";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _didLogMissingConfig = false;
+let _didLogIncompatibleConfig = false;
+
+type DbConfigSource = "DATABASE_URL" | "AZURE_SQL_CONNECTION_STRING" | "none";
+
+export type DatabaseDiagnostics = {
+  configured: boolean;
+  source: DbConfigSource;
+  looksLikeSqlServer: boolean;
+  looksLikeMysqlUrl: boolean;
+};
+
+export function getDatabaseDiagnostics(): DatabaseDiagnostics {
+  const source: DbConfigSource = process.env.DATABASE_URL
+    ? "DATABASE_URL"
+    : process.env.AZURE_SQL_CONNECTION_STRING
+      ? "AZURE_SQL_CONNECTION_STRING"
+      : "none";
+
+  const connectionString = ENV.databaseUrl;
+  const normalized = connectionString.toLowerCase();
+
+  return {
+    configured: Boolean(connectionString),
+    source,
+    looksLikeSqlServer: normalized.includes("server=tcp:"),
+    looksLikeMysqlUrl: normalized.startsWith("mysql://") || normalized.startsWith("mysql2://"),
+  };
+}
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  const diagnostics = getDatabaseDiagnostics();
+  const connectionString = ENV.databaseUrl;
+
+  if (!_db && connectionString) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // The current Drizzle setup targets MySQL-compatible databases.
+      // Azure SQL Server-style strings are not compatible with this driver.
+      if (diagnostics.looksLikeSqlServer) {
+        if (!_didLogIncompatibleConfig) {
+          console.warn(
+            "[Database] Detected Azure SQL Server connection string, but current DB driver is MySQL-compatible. Set DATABASE_URL (or AZURE_SQL_CONNECTION_STRING) to a MySQL/TiDB URL."
+          );
+          _didLogIncompatibleConfig = true;
+        }
+        return null;
+      }
+
+      _db = drizzle(connectionString);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
   }
 
+  if (!_db && !connectionString) {
+    if (!_didLogMissingConfig) {
+      console.warn(
+        "[Database] No database connection string configured. Set DATABASE_URL (preferred) or AZURE_SQL_CONNECTION_STRING to a MySQL-compatible URL."
+      );
+      _didLogMissingConfig = true;
+    }
+  }
+
   return _db;
+}
+
+export async function getDatabaseHealth() {
+  const diagnostics = getDatabaseDiagnostics();
+
+  if (!diagnostics.configured) {
+    return {
+      ok: false,
+      diagnostics,
+      reason: "missing_connection_string" as const,
+    };
+  }
+
+  if (diagnostics.looksLikeSqlServer) {
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query("SELECT 1 AS ok");
+      return {
+        ok: true,
+        diagnostics,
+        reason: "connected_azure_sql_fallback" as const,
+      };
+    } catch {
+      return {
+        ok: false,
+        diagnostics,
+        reason: "azure_sql_connection_failed" as const,
+      };
+    }
+  }
+
+  const db = await getDb();
+  return {
+    ok: Boolean(db),
+    diagnostics,
+    reason: db ? ("connected" as const) : ("connection_failed" as const),
+  };
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -80,23 +172,285 @@ export async function getUserByOpenId(openId: string) {
 export async function getUserProfile(userId: number): Promise<UserProfile | null> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get profile: database not available");
-    return null;
+    // Azure SQL fallback for profile reads when MySQL driver is not available.
+    if (!ENV.azureSqlConnectionString) {
+      console.warn("[Database] Cannot get profile: database not available");
+      return null;
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.user_profiles', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[user_profiles] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL UNIQUE,
+    [heightIn] INT NULL,
+    [weightLbs] INT NULL,
+    [ageYears] INT NULL,
+    [fitnessGoal] NVARCHAR(32) NULL,
+    [goalWeightLbs] INT NULL,
+    [goalDate] BIGINT NULL,
+    [dailyCalorieTarget] INT NULL,
+    [dailyProteinTarget] INT NULL,
+    [dailyCarbsTarget] INT NULL,
+    [dailyFatTarget] INT NULL,
+    [cgmAverageGlucose] INT NULL,
+    [cgmTimeInRange] FLOAT NULL,
+    [cgmA1cEstimate] FLOAT NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    [updatedAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+END
+      `);
+
+      await pool.request().query(`
+IF COL_LENGTH('dbo.user_profiles', 'goalWeightLbs') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [goalWeightLbs] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'goalDate') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [goalDate] BIGINT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyCalorieTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyCalorieTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyProteinTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyProteinTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyCarbsTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyCarbsTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyFatTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyFatTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'cgmAverageGlucose') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [cgmAverageGlucose] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'cgmTimeInRange') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [cgmTimeInRange] FLOAT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'cgmA1cEstimate') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [cgmA1cEstimate] FLOAT NULL;
+      `);
+
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP 1
+  [id],
+  [userId],
+  [heightIn],
+  [weightLbs],
+  [ageYears],
+  [fitnessGoal],
+  [goalWeightLbs],
+  [goalDate],
+  [dailyCalorieTarget],
+  [dailyProteinTarget],
+  [dailyCarbsTarget],
+  [dailyFatTarget],
+  [cgmAverageGlucose],
+  [cgmTimeInRange],
+  [cgmA1cEstimate],
+  [createdAt],
+  [updatedAt]
+FROM [dbo].[user_profiles]
+WHERE [userId] = @userId
+        `);
+
+      const row = result.recordset?.[0];
+      if (!row) return null;
+
+      const profile = {
+        id: row.id,
+        userId: row.userId,
+        heightIn: row.heightIn,
+        weightLbs: row.weightLbs,
+        ageYears: row.ageYears,
+        fitnessGoal: row.fitnessGoal,
+        goalWeightLbs: row.goalWeightLbs,
+        goalDate: row.goalDate,
+        dailyCalorieTarget: row.dailyCalorieTarget,
+        dailyProteinTarget: row.dailyProteinTarget,
+        dailyCarbsTarget: row.dailyCarbsTarget,
+        dailyFatTarget: row.dailyFatTarget,
+        cgmAverageGlucose: row.cgmAverageGlucose,
+        cgmTimeInRange: row.cgmTimeInRange,
+        cgmA1cEstimate: row.cgmA1cEstimate,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+        updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
+      } as UserProfile;
+
+      return resolveProfileTargets(profile);
+    } catch (error) {
+      console.warn("[Database] Error getting user profile (Azure SQL):", error);
+      return null;
+    }
   }
 
   try {
     const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
-    return result.length > 0 ? result[0] : null;
+    return result.length > 0 ? resolveProfileTargets(result[0]) : null;
   } catch (error) {
     console.warn("[Database] Error getting user profile:", error);
     return null;
   }
 }
 
+function resolveProfileTargets(profile: UserProfile): UserProfile {
+  const hasStoredTargets =
+    typeof profile.dailyCalorieTarget === "number" && profile.dailyCalorieTarget > 0 &&
+    typeof profile.dailyProteinTarget === "number" && profile.dailyProteinTarget > 0 &&
+    typeof profile.dailyCarbsTarget === "number" && profile.dailyCarbsTarget > 0 &&
+    typeof profile.dailyFatTarget === "number" && profile.dailyFatTarget > 0;
+
+  if (hasStoredTargets) {
+    return profile;
+  }
+
+  const hasBiometrics =
+    typeof profile.weightLbs === "number" && profile.weightLbs > 0 &&
+    typeof profile.heightIn === "number" && profile.heightIn > 0 &&
+    typeof profile.ageYears === "number" && profile.ageYears > 0;
+
+  const goal = (profile.fitnessGoal || "maintain") as FitnessGoal;
+  if (!hasBiometrics || !goal) {
+    return profile;
+  }
+
+  try {
+    const weightLbs = profile.weightLbs as number;
+    const heightIn = profile.heightIn as number;
+    const ageYears = profile.ageYears as number;
+
+    const weightKg = weightLbs * 0.453592;
+    const heightCm = heightIn * 2.54;
+    const tdee = calculateTDEE(weightKg, heightCm, ageYears, true);
+    const targets = calculateMacroTargets(
+      tdee,
+      weightKg,
+      goal,
+      weightLbs,
+      profile.goalWeightLbs ?? undefined,
+      profile.goalDate ?? undefined
+    );
+
+    return {
+      ...profile,
+      dailyCalorieTarget: targets.dailyCalories,
+      dailyProteinTarget: targets.dailyProtein,
+      dailyCarbsTarget: targets.dailyCarbs,
+      dailyFatTarget: targets.dailyFat,
+    };
+  } catch {
+    return profile;
+  }
+}
+
 export async function upsertUserProfile(userId: number, updates: Partial<InsertUserProfile>): Promise<UserProfile> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    const filteredUpdates = Object.fromEntries(
+      Object.entries(updates)
+        .filter(([key, value]) => value !== undefined && key !== "activityLevel")
+    ) as Partial<InsertUserProfile>;
+
+    try {
+      const pool = await getAzureSqlPool();
+
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.user_profiles', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[user_profiles] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL UNIQUE,
+    [heightIn] INT NULL,
+    [weightLbs] INT NULL,
+    [ageYears] INT NULL,
+    [fitnessGoal] NVARCHAR(32) NULL,
+    [goalWeightLbs] INT NULL,
+    [goalDate] BIGINT NULL,
+    [dailyCalorieTarget] INT NULL,
+    [dailyProteinTarget] INT NULL,
+    [dailyCarbsTarget] INT NULL,
+    [dailyFatTarget] INT NULL,
+    [cgmAverageGlucose] INT NULL,
+    [cgmTimeInRange] FLOAT NULL,
+    [cgmA1cEstimate] FLOAT NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    [updatedAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+END
+      `);
+
+      await pool.request().query(`
+IF COL_LENGTH('dbo.user_profiles', 'goalWeightLbs') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [goalWeightLbs] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'goalDate') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [goalDate] BIGINT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyCalorieTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyCalorieTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyProteinTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyProteinTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyCarbsTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyCarbsTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'dailyFatTarget') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [dailyFatTarget] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'cgmAverageGlucose') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [cgmAverageGlucose] INT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'cgmTimeInRange') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [cgmTimeInRange] FLOAT NULL;
+IF COL_LENGTH('dbo.user_profiles', 'cgmA1cEstimate') IS NULL
+  ALTER TABLE [dbo].[user_profiles] ADD [cgmA1cEstimate] FLOAT NULL;
+      `);
+
+      const existsResult = await pool
+        .request()
+        .input("userId", userId)
+        .query<{ found: number }>("SELECT TOP 1 1 AS [found] FROM [dbo].[user_profiles] WHERE [userId] = @userId");
+
+      const exists = Boolean(existsResult.recordset?.[0]?.found);
+
+      if (exists) {
+        if (Object.keys(filteredUpdates).length > 0) {
+          const request = pool.request().input("userId", userId);
+          const setClauses: string[] = [];
+
+          for (const [key, value] of Object.entries(filteredUpdates)) {
+            if (key === "userId" || key === "id") continue;
+            request.input(key, value ?? null);
+            setClauses.push(`[${key}] = @${key}`);
+          }
+
+          if (setClauses.length > 0) {
+            setClauses.push("[updatedAt] = SYSUTCDATETIME()");
+            await request.query(
+              `UPDATE [dbo].[user_profiles] SET ${setClauses.join(", ")} WHERE [userId] = @userId`
+            );
+          }
+        }
+      } else {
+        const request = pool.request().input("userId", userId);
+        const columns = ["[userId]"];
+        const values = ["@userId"];
+
+        for (const [key, value] of Object.entries(filteredUpdates)) {
+          if (key === "userId" || key === "id") continue;
+          request.input(key, value ?? null);
+          columns.push(`[${key}]`);
+          values.push(`@${key}`);
+        }
+
+        await request.query(
+          `INSERT INTO [dbo].[user_profiles] (${columns.join(", ")}) VALUES (${values.join(", ")})`
+        );
+      }
+
+      const profile = await getUserProfile(userId);
+      if (!profile) throw new Error("Failed to upsert user profile");
+      return profile;
+    } catch (error) {
+      console.warn("[Database] Error upserting user profile (Azure SQL):", error);
+      throw new Error("Failed to save profile");
+    }
   }
 
   // Filter out undefined values and activityLevel (not yet in DB)
@@ -133,7 +487,84 @@ export async function upsertUserProfile(userId: number, updates: Partial<InsertU
 export async function addFoodLog(userId: number, log: Omit<InsertFoodLog, "userId">): Promise<FoodLog> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.food_logs', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[food_logs] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [foodName] NVARCHAR(191) NOT NULL,
+    [servingSize] NVARCHAR(120) NULL,
+    [calories] INT NOT NULL,
+    [proteinGrams] FLOAT NOT NULL,
+    [carbsGrams] FLOAT NOT NULL,
+    [fatGrams] FLOAT NOT NULL,
+    [loggedAt] BIGINT NOT NULL,
+    [mealType] NVARCHAR(32) NOT NULL DEFAULT 'other',
+    [notes] NVARCHAR(MAX) NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_food_logs_userId_loggedAt] ON [dbo].[food_logs] ([userId], [loggedAt] DESC);
+END
+      `);
+
+      await pool
+        .request()
+        .input("userId", userId)
+        .input("foodName", log.foodName)
+        .input("servingSize", log.servingSize ?? null)
+        .input("calories", log.calories)
+        .input("proteinGrams", log.proteinGrams)
+        .input("carbsGrams", log.carbsGrams)
+        .input("fatGrams", log.fatGrams)
+        .input("loggedAt", log.loggedAt)
+        .input("mealType", log.mealType ?? "other")
+        .input("notes", log.notes ?? null)
+        .query(`
+INSERT INTO [dbo].[food_logs]
+  ([userId], [foodName], [servingSize], [calories], [proteinGrams], [carbsGrams], [fatGrams], [loggedAt], [mealType], [notes])
+VALUES
+  (@userId, @foodName, @servingSize, @calories, @proteinGrams, @carbsGrams, @fatGrams, @loggedAt, @mealType, @notes)
+        `);
+
+      const createdResult = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP 1
+  [id], [userId], [foodName], [servingSize], [calories], [proteinGrams], [carbsGrams], [fatGrams], [loggedAt], [mealType], [notes], [createdAt]
+FROM [dbo].[food_logs]
+WHERE [userId] = @userId
+ORDER BY [id] DESC
+        `);
+
+      const row = createdResult.recordset?.[0];
+      if (!row) throw new Error("Failed to create food log");
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        foodName: row.foodName,
+        servingSize: row.servingSize,
+        calories: row.calories,
+        proteinGrams: row.proteinGrams,
+        carbsGrams: row.carbsGrams,
+        fatGrams: row.fatGrams,
+        loggedAt: row.loggedAt,
+        mealType: row.mealType,
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      } as FoodLog;
+    } catch (error) {
+      console.warn("[Database] Error adding food log (Azure SQL):", error);
+      throw new Error("Failed to save food log");
+    }
   }
 
   const newLog: InsertFoodLog = {
@@ -157,8 +588,67 @@ export async function addFoodLog(userId: number, log: Omit<InsertFoodLog, "userI
 export async function getFoodLogsForDay(userId: number, startOfDay: number, endOfDay: number): Promise<FoodLog[]> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get food logs: database not available");
-    return [];
+    if (!ENV.azureSqlConnectionString) {
+      console.warn("[Database] Cannot get food logs: database not available");
+      return [];
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.food_logs', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[food_logs] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [foodName] NVARCHAR(191) NOT NULL,
+    [servingSize] NVARCHAR(120) NULL,
+    [calories] INT NOT NULL,
+    [proteinGrams] FLOAT NOT NULL,
+    [carbsGrams] FLOAT NOT NULL,
+    [fatGrams] FLOAT NOT NULL,
+    [loggedAt] BIGINT NOT NULL,
+    [mealType] NVARCHAR(32) NOT NULL DEFAULT 'other',
+    [notes] NVARCHAR(MAX) NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_food_logs_userId_loggedAt] ON [dbo].[food_logs] ([userId], [loggedAt] DESC);
+END
+      `);
+
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("startOfDay", startOfDay)
+        .input("endOfDay", endOfDay)
+        .query<any>(`
+SELECT
+  [id], [userId], [foodName], [servingSize], [calories], [proteinGrams], [carbsGrams], [fatGrams], [loggedAt], [mealType], [notes], [createdAt]
+FROM [dbo].[food_logs]
+WHERE [userId] = @userId
+  AND [loggedAt] >= @startOfDay
+  AND [loggedAt] <= @endOfDay
+ORDER BY [loggedAt] DESC
+        `);
+
+      return (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        foodName: row.foodName,
+        servingSize: row.servingSize,
+        calories: row.calories,
+        proteinGrams: row.proteinGrams,
+        carbsGrams: row.carbsGrams,
+        fatGrams: row.fatGrams,
+        loggedAt: row.loggedAt,
+        mealType: row.mealType,
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as FoodLog[];
+    } catch (error) {
+      console.warn("[Database] Error getting food logs (Azure SQL):", error);
+      return [];
+    }
   }
 
   return db
@@ -192,7 +682,22 @@ export async function getRecentFoods(userId: number, limit: number = 5): Promise
 export async function deleteFoodLog(foodLogId: number, userId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool
+        .request()
+        .input("foodLogId", foodLogId)
+        .input("userId", userId)
+        .query(`DELETE FROM [dbo].[food_logs] WHERE [id] = @foodLogId AND [userId] = @userId`);
+      return true;
+    } catch (error) {
+      console.warn("[Database] Error deleting food log (Azure SQL):", error);
+      throw new Error("Failed to delete food log");
+    }
   }
 
   await db.delete(foodLogs).where(and(eq(foodLogs.id, foodLogId), eq(foodLogs.userId, userId)));
@@ -202,7 +707,90 @@ export async function deleteFoodLog(foodLogId: number, userId: number): Promise<
 export async function updateFoodLog(foodLogId: number, userId: number, updates: Partial<Omit<InsertFoodLog, "userId">>): Promise<FoodLog> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const filteredUpdates = Object.fromEntries(
+        Object.entries(updates).filter(([, value]) => value !== undefined)
+      ) as Partial<Omit<InsertFoodLog, "userId">>;
+
+      if (Object.keys(filteredUpdates).length > 0) {
+        const pool = await getAzureSqlPool();
+        const request = pool.request().input("foodLogId", foodLogId).input("userId", userId);
+        const setClauses: string[] = [];
+
+        for (const [key, value] of Object.entries(filteredUpdates)) {
+          request.input(key, value ?? null);
+          setClauses.push(`[${key}] = @${key}`);
+        }
+
+        await request.query(`
+UPDATE [dbo].[food_logs]
+SET ${setClauses.join(", ")}
+WHERE [id] = @foodLogId AND [userId] = @userId
+        `);
+
+        const updatedResult = await pool
+          .request()
+          .input("foodLogId", foodLogId)
+          .query<any>(`
+SELECT TOP 1
+  [id], [userId], [foodName], [servingSize], [calories], [proteinGrams], [carbsGrams], [fatGrams], [loggedAt], [mealType], [notes], [createdAt]
+FROM [dbo].[food_logs]
+WHERE [id] = @foodLogId
+          `);
+
+        const row = updatedResult.recordset?.[0];
+        if (!row) throw new Error("Failed to update food log");
+
+        return {
+          id: row.id,
+          userId: row.userId,
+          foodName: row.foodName,
+          servingSize: row.servingSize,
+          calories: row.calories,
+          proteinGrams: row.proteinGrams,
+          carbsGrams: row.carbsGrams,
+          fatGrams: row.fatGrams,
+          loggedAt: row.loggedAt,
+          mealType: row.mealType,
+          notes: row.notes,
+          createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+        } as FoodLog;
+      }
+
+      const pool = await getAzureSqlPool();
+      const unchangedResult = await pool
+        .request()
+        .input("foodLogId", foodLogId)
+        .query<any>(`
+SELECT TOP 1
+  [id], [userId], [foodName], [servingSize], [calories], [proteinGrams], [carbsGrams], [fatGrams], [loggedAt], [mealType], [notes], [createdAt]
+FROM [dbo].[food_logs]
+WHERE [id] = @foodLogId
+        `);
+      const unchanged = unchangedResult.recordset?.[0];
+      if (!unchanged) throw new Error("Failed to update food log");
+      return {
+        id: unchanged.id,
+        userId: unchanged.userId,
+        foodName: unchanged.foodName,
+        servingSize: unchanged.servingSize,
+        calories: unchanged.calories,
+        proteinGrams: unchanged.proteinGrams,
+        carbsGrams: unchanged.carbsGrams,
+        fatGrams: unchanged.fatGrams,
+        loggedAt: unchanged.loggedAt,
+        mealType: unchanged.mealType,
+        notes: unchanged.notes,
+        createdAt: unchanged.createdAt ? new Date(unchanged.createdAt) : new Date(),
+      } as FoodLog;
+    } catch (error) {
+      console.warn("[Database] Error updating food log (Azure SQL):", error);
+      throw new Error("Failed to update food log");
+    }
   }
 
   await db
@@ -709,7 +1297,73 @@ export async function cleanupExpiredCache(): Promise<void> {
 export async function addProgressPhoto(userId: number, photo: Omit<InsertProgressPhoto, "userId">): Promise<ProgressPhoto> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.progress_photos', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[progress_photos] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [photoUrl] NVARCHAR(MAX) NOT NULL,
+    [photoKey] NVARCHAR(255) NOT NULL,
+    [photoName] NVARCHAR(191) NOT NULL,
+    [photoDate] BIGINT NOT NULL,
+    [description] NVARCHAR(MAX) NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    [updatedAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_progress_photos_userId_photoDate] ON [dbo].[progress_photos] ([userId], [photoDate] DESC);
+END
+      `);
+
+      await pool
+        .request()
+        .input("userId", userId)
+        .input("photoUrl", photo.photoUrl)
+        .input("photoKey", photo.photoKey)
+        .input("photoName", photo.photoName)
+        .input("photoDate", photo.photoDate)
+        .input("description", photo.description ?? null)
+        .query(`
+INSERT INTO [dbo].[progress_photos]
+  ([userId], [photoUrl], [photoKey], [photoName], [photoDate], [description])
+VALUES
+  (@userId, @photoUrl, @photoKey, @photoName, @photoDate, @description)
+        `);
+
+      const created = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP 1 [id], [userId], [photoUrl], [photoKey], [photoName], [photoDate], [description], [createdAt], [updatedAt]
+FROM [dbo].[progress_photos]
+WHERE [userId] = @userId
+ORDER BY [photoDate] DESC, [id] DESC
+        `);
+
+      const row = created.recordset?.[0];
+      if (!row) throw new Error("Failed to create progress photo");
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        photoUrl: row.photoUrl,
+        photoKey: row.photoKey,
+        photoName: row.photoName,
+        photoDate: Number(row.photoDate),
+        description: row.description,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+        updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
+      } as ProgressPhoto;
+    } catch (error) {
+      console.error("[Database] Error creating progress photo (Azure SQL):", error);
+      throw new Error("Failed to create progress photo");
+    }
   }
 
   const newPhoto: InsertProgressPhoto = {
@@ -733,8 +1387,60 @@ export async function addProgressPhoto(userId: number, photo: Omit<InsertProgres
 export async function getProgressPhotos(userId: number): Promise<ProgressPhoto[]> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get progress photos: database not available");
-    return [];
+    if (!ENV.azureSqlConnectionString) {
+      console.warn("[Database] Cannot get progress photos: database not available");
+      return [];
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      const rows = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT [id], [userId], [photoUrl], [photoKey], [photoName], [photoDate], [description], [createdAt], [updatedAt]
+FROM [dbo].[progress_photos]
+WHERE [userId] = @userId
+ORDER BY [photoDate] DESC, [id] DESC
+        `);
+
+      const { storageGet } = await import("./storage");
+      const withSasUrls = await Promise.all(
+        (rows.recordset || []).map(async (row: any) => {
+          try {
+            const { url } = await storageGet(row.photoKey);
+            return {
+              id: row.id,
+              userId: row.userId,
+              photoUrl: url,
+              photoKey: row.photoKey,
+              photoName: row.photoName,
+              photoDate: Number(row.photoDate),
+              description: row.description,
+              createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+              updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
+            } as ProgressPhoto;
+          } catch {
+            return {
+              id: row.id,
+              userId: row.userId,
+              photoUrl: row.photoUrl,
+              photoKey: row.photoKey,
+              photoName: row.photoName,
+              photoDate: Number(row.photoDate),
+              description: row.description,
+              createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+              updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
+            } as ProgressPhoto;
+          }
+        })
+      );
+
+      return withSasUrls;
+    } catch (error) {
+      console.error("[Database] Error fetching progress photos (Azure SQL):", error);
+      return [];
+    }
   }
 
   try {
@@ -764,7 +1470,22 @@ export async function getProgressPhotos(userId: number): Promise<ProgressPhoto[]
 export async function deleteProgressPhoto(photoId: number, userId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      const result = await pool
+        .request()
+        .input("photoId", photoId)
+        .input("userId", userId)
+        .query(`DELETE FROM [dbo].[progress_photos] WHERE [id] = @photoId AND [userId] = @userId`);
+      return (result.rowsAffected?.[0] || 0) > 0;
+    } catch (error) {
+      console.error("[Database] Error deleting progress photo (Azure SQL):", error);
+      throw new Error("Failed to delete progress photo");
+    }
   }
 
   await db.delete(progressPhotos).where(and(eq(progressPhotos.id, photoId), eq(progressPhotos.userId, userId)));
@@ -778,7 +1499,62 @@ export async function updateProgressPhoto(
 ): Promise<ProgressPhoto> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      const request = pool.request().input("photoId", photoId).input("userId", userId);
+      const setClauses: string[] = [];
+
+      if (updates.photoName !== undefined) {
+        request.input("photoName", updates.photoName ?? null);
+        setClauses.push("[photoName] = @photoName");
+      }
+      if (updates.photoDate !== undefined) {
+        request.input("photoDate", updates.photoDate ?? null);
+        setClauses.push("[photoDate] = @photoDate");
+      }
+      if (updates.description !== undefined) {
+        request.input("description", updates.description ?? null);
+        setClauses.push("[description] = @description");
+      }
+
+      if (setClauses.length > 0) {
+        setClauses.push("[updatedAt] = SYSUTCDATETIME()");
+        await request.query(
+          `UPDATE [dbo].[progress_photos] SET ${setClauses.join(", ")} WHERE [id] = @photoId AND [userId] = @userId`
+        );
+      }
+
+      const result = await pool
+        .request()
+        .input("photoId", photoId)
+        .query<any>(`
+SELECT TOP 1 [id], [userId], [photoUrl], [photoKey], [photoName], [photoDate], [description], [createdAt], [updatedAt]
+FROM [dbo].[progress_photos]
+WHERE [id] = @photoId
+        `);
+
+      const row = result.recordset?.[0];
+      if (!row) throw new Error("Failed to update progress photo");
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        photoUrl: row.photoUrl,
+        photoKey: row.photoKey,
+        photoName: row.photoName,
+        photoDate: Number(row.photoDate),
+        description: row.description,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+        updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
+      } as ProgressPhoto;
+    } catch (error) {
+      console.error("[Database] Error updating progress photo (Azure SQL):", error);
+      throw new Error("Failed to update progress photo");
+    }
   }
 
   await db
@@ -794,10 +1570,152 @@ export async function updateProgressPhoto(
 
 // Glucose Readings Functions
 
+async function ensureGlucoseInfrastructureAzureSql() {
+  const pool = await getAzureSqlPool();
+  await pool.request().query(`
+IF OBJECT_ID(N'dbo.health_sources', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[health_sources] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [provider] NVARCHAR(64) NOT NULL,
+    [category] NVARCHAR(32) NOT NULL,
+    [status] NVARCHAR(32) NOT NULL,
+    [implementationStage] NVARCHAR(64) NOT NULL,
+    [authType] NVARCHAR(32) NOT NULL,
+    [displayName] NVARCHAR(120) NOT NULL,
+    [description] NVARCHAR(MAX) NOT NULL,
+    [lastSyncStatus] NVARCHAR(32) NOT NULL DEFAULT N'idle',
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    [updatedAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_health_sources_userId_displayName] ON [dbo].[health_sources] ([userId], [displayName]);
+END
+
+IF OBJECT_ID(N'dbo.glucose_readings', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[glucose_readings] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [sourceId] INT NOT NULL,
+    [readingAt] BIGINT NOT NULL,
+    [mgdl] FLOAT NOT NULL,
+    [trend] NVARCHAR(64) NULL,
+    [notes] NVARCHAR(MAX) NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_glucose_readings_userId_readingAt] ON [dbo].[glucose_readings] ([userId], [readingAt] DESC);
+  CREATE INDEX [idx_glucose_readings_sourceId] ON [dbo].[glucose_readings] ([sourceId]);
+END
+  `);
+  return pool;
+}
+
+export async function getOrCreateGlucoseSource(userId: number, displayName: string = "Dexcom Clarity"): Promise<number> {
+  const db = await getDb();
+  if (db) {
+    const existing = await db
+      .select({ id: healthSources.id })
+      .from(healthSources)
+      .where(and(eq(healthSources.userId, userId), eq(healthSources.displayName, displayName)))
+      .limit(1);
+
+    if (existing.length > 0) return existing[0].id;
+
+    const inserted = await db.insert(healthSources).values({
+      userId,
+      provider: "custom_app",
+      category: "glucose",
+      status: "connected",
+      implementationStage: "custom",
+      authType: "custom",
+      displayName,
+      description: `Glucose readings imported from ${displayName}`,
+      lastSyncStatus: "idle",
+    });
+
+    return (inserted as any).insertId as number;
+  }
+
+  if (!ENV.azureSqlConnectionString) {
+    throw new Error("Database is not available");
+  }
+
+  try {
+    const pool = await ensureGlucoseInfrastructureAzureSql();
+    const existing = await pool
+      .request()
+      .input("userId", userId)
+      .input("displayName", displayName)
+      .query<any>(`
+SELECT TOP 1 [id]
+FROM [dbo].[health_sources]
+WHERE [userId] = @userId AND [displayName] = @displayName
+ORDER BY [id] DESC
+      `);
+
+    if (existing.recordset?.length) {
+      return Number(existing.recordset[0].id);
+    }
+
+    await pool
+      .request()
+      .input("userId", userId)
+      .input("displayName", displayName)
+      .query(`
+INSERT INTO [dbo].[health_sources]
+  ([userId], [provider], [category], [status], [implementationStage], [authType], [displayName], [description], [lastSyncStatus])
+VALUES
+  (@userId, N'custom_app', N'glucose', N'connected', N'custom', N'custom', @displayName, N'Imported glucose source', N'idle')
+      `);
+
+    const created = await pool
+      .request()
+      .input("userId", userId)
+      .input("displayName", displayName)
+      .query<any>(`
+SELECT TOP 1 [id]
+FROM [dbo].[health_sources]
+WHERE [userId] = @userId AND [displayName] = @displayName
+ORDER BY [id] DESC
+      `);
+
+    const id = created.recordset?.[0]?.id;
+    if (!id) throw new Error("Failed to create glucose source");
+    return Number(id);
+  } catch (error) {
+    console.error("[Database] Error ensuring glucose source (Azure SQL):", error);
+    throw new Error("Failed to ensure glucose source");
+  }
+}
+
 export async function addGlucoseReadings(userId: number, sourceId: number, readings: Array<{ readingAt: number; mgdl: number; trend?: string }>) {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      for (const r of readings) {
+        await pool
+          .request()
+          .input("userId", userId)
+          .input("sourceId", sourceId)
+          .input("readingAt", r.readingAt)
+          .input("mgdl", r.mgdl)
+          .input("trend", r.trend ?? null)
+          .query(`
+INSERT INTO [dbo].[glucose_readings] ([userId], [sourceId], [readingAt], [mgdl], [trend])
+VALUES (@userId, @sourceId, @readingAt, @mgdl, @trend)
+          `);
+      }
+      return;
+    } catch (error) {
+      console.error("[Database] Error adding glucose readings (Azure SQL):", error);
+      throw new Error("Failed to save glucose readings");
+    }
   }
 
   const values = readings.map(r => ({
@@ -814,8 +1732,40 @@ export async function addGlucoseReadings(userId: number, sourceId: number, readi
 export async function getGlucoseReadingsForDateRange(userId: number, startTime: number, endTime: number): Promise<GlucoseReading[]> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get glucose readings: database not available");
-    return [];
+    if (!ENV.azureSqlConnectionString) {
+      console.warn("[Database] Cannot get glucose readings: database not available");
+      return [];
+    }
+
+    try {
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("startTime", startTime)
+        .input("endTime", endTime)
+        .query<any>(`
+SELECT [id], [userId], [sourceId], [readingAt], [mgdl], [trend], [notes], [createdAt]
+FROM [dbo].[glucose_readings]
+WHERE [userId] = @userId AND [readingAt] >= @startTime AND [readingAt] <= @endTime
+ORDER BY [readingAt] DESC, [id] DESC
+        `);
+
+      return (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        sourceId: row.sourceId,
+        readingAt: Number(row.readingAt),
+        mgdl: row.mgdl,
+        trend: row.trend,
+        mealContext: null,
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as GlucoseReading[];
+    } catch (error) {
+      console.error("[Database] Error fetching glucose readings (Azure SQL):", error);
+      return [];
+    }
   }
 
   return db
@@ -1011,12 +1961,295 @@ export async function getStepHistory(
   return rows.map((r) => ({ date: r.sampleDate, steps: r.steps }));
 }
 
+let _didEnsureWorkoutTableMySql = false;
+
+async function ensureWorkoutTableMySql(db: any) {
+  if (_didEnsureWorkoutTableMySql) return;
+
+  await db.execute(sql`
+CREATE TABLE IF NOT EXISTS workout_entries (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  userId INT NOT NULL,
+  exerciseName VARCHAR(191) NOT NULL,
+  exerciseType VARCHAR(64) NOT NULL,
+  durationMinutes INT NOT NULL,
+  caloriesBurned INT NOT NULL DEFAULT 0,
+  intensity VARCHAR(32) NOT NULL DEFAULT 'moderate',
+  notes TEXT NULL,
+  recordedAt BIGINT NOT NULL,
+  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_workout_entries_userId_recordedAt (userId, recordedAt DESC)
+)
+  `);
+
+  _didEnsureWorkoutTableMySql = true;
+}
+
+async function ensureWorkoutTableAzureSql() {
+  const pool = await getAzureSqlPool();
+  await pool.request().query(`
+IF OBJECT_ID(N'dbo.workout_entries', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[workout_entries] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [exerciseName] NVARCHAR(191) NOT NULL,
+    [exerciseType] NVARCHAR(64) NOT NULL,
+    [durationMinutes] INT NOT NULL,
+    [caloriesBurned] INT NOT NULL DEFAULT 0,
+    [intensity] NVARCHAR(32) NOT NULL DEFAULT 'moderate',
+    [notes] NVARCHAR(MAX) NULL,
+    [recordedAt] BIGINT NOT NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_workout_entries_userId_recordedAt] ON [dbo].[workout_entries] ([userId], [recordedAt] DESC);
+END
+  `);
+
+  return pool;
+}
+
+// Workout Tracking Functions
+export async function addWorkoutEntry(
+  userId: number,
+  entry: {
+    exerciseName: string;
+    exerciseType: string;
+    durationMinutes: number;
+    caloriesBurned?: number;
+    intensity?: string;
+    notes?: string;
+    recordedAt?: number;
+  }
+): Promise<WorkoutEntry> {
+  const db = await getDb();
+  const recordedAt = entry.recordedAt ?? Date.now();
+
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await ensureWorkoutTableAzureSql();
+      await pool
+        .request()
+        .input("userId", userId)
+        .input("exerciseName", entry.exerciseName)
+        .input("exerciseType", entry.exerciseType)
+        .input("durationMinutes", entry.durationMinutes)
+        .input("caloriesBurned", entry.caloriesBurned ?? 0)
+        .input("intensity", entry.intensity ?? "moderate")
+        .input("notes", entry.notes ?? null)
+        .input("recordedAt", recordedAt)
+        .query(`
+INSERT INTO [dbo].[workout_entries]
+  ([userId], [exerciseName], [exerciseType], [durationMinutes], [caloriesBurned], [intensity], [notes], [recordedAt])
+VALUES
+  (@userId, @exerciseName, @exerciseType, @durationMinutes, @caloriesBurned, @intensity, @notes, @recordedAt)
+        `);
+
+      const created = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP 1 [id], [userId], [exerciseName], [exerciseType], [durationMinutes], [caloriesBurned], [intensity], [notes], [recordedAt], [createdAt]
+FROM [dbo].[workout_entries]
+WHERE [userId] = @userId
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      const row = created.recordset?.[0];
+      if (!row) throw new Error("Failed to create workout entry");
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        exerciseName: row.exerciseName,
+        exerciseType: row.exerciseType,
+        durationMinutes: row.durationMinutes,
+        caloriesBurned: row.caloriesBurned,
+        intensity: row.intensity,
+        notes: row.notes,
+        recordedAt: Number(row.recordedAt),
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      } as WorkoutEntry;
+    } catch (error) {
+      console.error("[Database] Error creating workout entry (Azure SQL):", error);
+      throw new Error("Failed to create workout entry");
+    }
+  }
+
+  await ensureWorkoutTableMySql(db);
+
+  const newEntry: InsertWorkoutEntry = {
+    userId,
+    exerciseName: entry.exerciseName,
+    exerciseType: entry.exerciseType,
+    durationMinutes: entry.durationMinutes,
+    caloriesBurned: entry.caloriesBurned ?? 0,
+    intensity: entry.intensity ?? "moderate",
+    notes: entry.notes ?? null,
+    recordedAt,
+  };
+
+  await db.insert(workoutEntries).values(newEntry);
+
+  const created = await db
+    .select()
+    .from(workoutEntries)
+    .where(eq(workoutEntries.userId, userId))
+    .orderBy((t) => desc(t.recordedAt))
+    .limit(1);
+
+  if (!created || created.length === 0) throw new Error("Failed to create workout entry");
+  return created[0];
+}
+
+export async function getWorkoutEntries(userId: number, days: number = 30): Promise<WorkoutEntry[]> {
+  const db = await getDb();
+  const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) {
+      console.warn("[Database] Cannot get workout entries: database not available");
+      return [];
+    }
+
+    try {
+      const pool = await ensureWorkoutTableAzureSql();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("cutoffTime", cutoffTime)
+        .query<any>(`
+SELECT [id], [userId], [exerciseName], [exerciseType], [durationMinutes], [caloriesBurned], [intensity], [notes], [recordedAt], [createdAt]
+FROM [dbo].[workout_entries]
+WHERE [userId] = @userId AND [recordedAt] >= @cutoffTime
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      return (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        exerciseName: row.exerciseName,
+        exerciseType: row.exerciseType,
+        durationMinutes: row.durationMinutes,
+        caloriesBurned: row.caloriesBurned,
+        intensity: row.intensity,
+        notes: row.notes,
+        recordedAt: Number(row.recordedAt),
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as WorkoutEntry[];
+    } catch (error) {
+      console.error("[Database] Error fetching workout entries (Azure SQL):", error);
+      return [];
+    }
+  }
+
+  await ensureWorkoutTableMySql(db);
+
+  try {
+    return await db
+      .select()
+      .from(workoutEntries)
+      .where(and(eq(workoutEntries.userId, userId), gte(workoutEntries.recordedAt, cutoffTime)))
+      .orderBy((t) => desc(t.recordedAt));
+  } catch (error) {
+    console.error("[Database] Error fetching workout entries:", error);
+    return [];
+  }
+}
+
+export async function deleteWorkoutEntry(entryId: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await ensureWorkoutTableAzureSql();
+      const result = await pool
+        .request()
+        .input("entryId", entryId)
+        .input("userId", userId)
+        .query(`DELETE FROM [dbo].[workout_entries] WHERE [id] = @entryId AND [userId] = @userId`);
+      return (result.rowsAffected?.[0] || 0) > 0;
+    } catch (error) {
+      console.error("[Database] Error deleting workout entry (Azure SQL):", error);
+      throw new Error("Failed to delete workout entry");
+    }
+  }
+
+  await ensureWorkoutTableMySql(db);
+  await db.delete(workoutEntries).where(and(eq(workoutEntries.id, entryId), eq(workoutEntries.userId, userId)));
+  return true;
+}
+
 
 // Weight Tracking Functions
 export async function addWeightEntry(userId: number, weightLbs: number, recordedAt: number, notes?: string): Promise<WeightEntry> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.weight_entries', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[weight_entries] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [weightLbs] INT NOT NULL,
+    [recordedAt] BIGINT NOT NULL,
+    [notes] NVARCHAR(MAX) NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_weight_entries_userId_recordedAt] ON [dbo].[weight_entries] ([userId], [recordedAt] DESC);
+END
+      `);
+
+      await pool
+        .request()
+        .input("userId", userId)
+        .input("weightLbs", weightLbs)
+        .input("recordedAt", recordedAt)
+        .input("notes", notes ?? null)
+        .query(`
+INSERT INTO [dbo].[weight_entries] ([userId], [weightLbs], [recordedAt], [notes])
+VALUES (@userId, @weightLbs, @recordedAt, @notes)
+        `);
+
+      const created = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP 1 [id], [userId], [weightLbs], [recordedAt], [notes], [createdAt]
+FROM [dbo].[weight_entries]
+WHERE [userId] = @userId
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      const row = created.recordset?.[0];
+      if (!row) throw new Error("Failed to create weight entry");
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        weightLbs: row.weightLbs,
+        recordedAt: Number(row.recordedAt),
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      } as WeightEntry;
+    } catch (error) {
+      console.error("[Database] Error creating weight entry (Azure SQL):", error);
+      throw new Error("Failed to create weight entry");
+    }
   }
 
   const newEntry: InsertWeightEntry = {
@@ -1042,8 +2275,38 @@ export async function addWeightEntry(userId: number, weightLbs: number, recorded
 export async function getWeightEntries(userId: number, days: number = 90): Promise<WeightEntry[]> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot get weight entries: database not available");
-    return [];
+    if (!ENV.azureSqlConnectionString) {
+      console.warn("[Database] Cannot get weight entries: database not available");
+      return [];
+    }
+
+    const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
+
+    try {
+      const pool = await getAzureSqlPool();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("cutoffTime", cutoffTime)
+        .query<any>(`
+SELECT [id], [userId], [weightLbs], [recordedAt], [notes], [createdAt]
+FROM [dbo].[weight_entries]
+WHERE [userId] = @userId AND [recordedAt] >= @cutoffTime
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      return (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        weightLbs: row.weightLbs,
+        recordedAt: Number(row.recordedAt),
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as WeightEntry[];
+    } catch (error) {
+      console.error("[Database] Error fetching weight entries (Azure SQL):", error);
+      return [];
+    }
   }
 
   const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000;
@@ -1065,7 +2328,22 @@ export async function getWeightEntries(userId: number, days: number = 90): Promi
 export async function deleteWeightEntry(entryId: number, userId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) {
-    throw new Error("Database is not available");
+    if (!ENV.azureSqlConnectionString) {
+      throw new Error("Database is not available");
+    }
+
+    try {
+      const pool = await getAzureSqlPool();
+      const result = await pool
+        .request()
+        .input("entryId", entryId)
+        .input("userId", userId)
+        .query(`DELETE FROM [dbo].[weight_entries] WHERE [id] = @entryId AND [userId] = @userId`);
+      return (result.rowsAffected?.[0] || 0) > 0;
+    } catch (error) {
+      console.error("[Database] Error deleting weight entry (Azure SQL):", error);
+      throw new Error("Failed to delete weight entry");
+    }
   }
 
   await db.delete(weightEntries).where(and(eq(weightEntries.id, entryId), eq(weightEntries.userId, userId)));
@@ -1094,14 +2372,46 @@ export async function getWeightProgressData(userId: number, days: number = 90): 
 
 export async function getCGMStats(userId: number, days: number = 30) {
   const db = await getDb();
-  if (!db) return null;
-
   const since = Date.now() - days * 24 * 60 * 60 * 1000;
-  const readings = await db
-    .select()
-    .from(glucoseReadings)
-    .where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since)))
-    .orderBy(desc(glucoseReadings.readingAt));
+  let readings: GlucoseReading[] = [];
+
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return null;
+    try {
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("since", since)
+        .query<any>(`
+SELECT [id], [userId], [sourceId], [readingAt], [mgdl], [trend], [notes], [createdAt]
+FROM [dbo].[glucose_readings]
+WHERE [userId] = @userId AND [readingAt] >= @since
+ORDER BY [readingAt] DESC, [id] DESC
+        `);
+
+      readings = (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        sourceId: row.sourceId,
+        readingAt: Number(row.readingAt),
+        mgdl: row.mgdl,
+        trend: row.trend,
+        mealContext: null,
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as GlucoseReading[];
+    } catch (error) {
+      console.error("[Database] Error getting CGM stats (Azure SQL):", error);
+      return null;
+    }
+  } else {
+    readings = await db
+      .select()
+      .from(glucoseReadings)
+      .where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since)))
+      .orderBy(desc(glucoseReadings.readingAt));
+  }
 
   if (readings.length === 0) return null;
 
@@ -1131,14 +2441,46 @@ export async function getCGMStats(userId: number, days: number = 30) {
 
 export async function getCGMDailyAverages(userId: number, days: number = 7): Promise<{ date: string; avg: number; min: number; max: number }[]> {
   const db = await getDb();
-  if (!db) return [];
-
   const since = Date.now() - days * 24 * 60 * 60 * 1000;
-  const readings = await db
-    .select()
-    .from(glucoseReadings)
-    .where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since)))
-    .orderBy(glucoseReadings.readingAt);
+  let readings: GlucoseReading[] = [];
+
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return [];
+    try {
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("since", since)
+        .query<any>(`
+SELECT [id], [userId], [sourceId], [readingAt], [mgdl], [trend], [notes], [createdAt]
+FROM [dbo].[glucose_readings]
+WHERE [userId] = @userId AND [readingAt] >= @since
+ORDER BY [readingAt] ASC, [id] ASC
+        `);
+
+      readings = (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        sourceId: row.sourceId,
+        readingAt: Number(row.readingAt),
+        mgdl: row.mgdl,
+        trend: row.trend,
+        mealContext: null,
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as GlucoseReading[];
+    } catch (error) {
+      console.error("[Database] Error getting CGM daily averages (Azure SQL):", error);
+      return [];
+    }
+  } else {
+    readings = await db
+      .select()
+      .from(glucoseReadings)
+      .where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since)))
+      .orderBy(glucoseReadings.readingAt);
+  }
 
   // Group by calendar day
   const byDay = new Map<string, number[]>();
@@ -1175,7 +2517,72 @@ export async function addBodyMeasurement(
   notes?: string
 ): Promise<BodyMeasurement | null> {
   const db = await getDb();
-  if (!db) return null;
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return null;
+
+    try {
+      const pool = await getAzureSqlPool();
+      await pool.request().query(`
+IF OBJECT_ID(N'dbo.body_measurements', N'U') IS NULL
+BEGIN
+  CREATE TABLE [dbo].[body_measurements] (
+    [id] INT IDENTITY(1,1) PRIMARY KEY,
+    [userId] INT NOT NULL,
+    [chestInches] FLOAT NULL,
+    [waistInches] FLOAT NULL,
+    [hipsInches] FLOAT NULL,
+    [recordedAt] BIGINT NOT NULL,
+    [notes] NVARCHAR(MAX) NULL,
+    [createdAt] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+  CREATE INDEX [idx_body_measurements_userId_recordedAt] ON [dbo].[body_measurements] ([userId], [recordedAt] DESC);
+END
+      `);
+
+      const recordedAt = Date.now();
+      await pool
+        .request()
+        .input("userId", userId)
+        .input("chestInches", chest ?? null)
+        .input("waistInches", waist ?? null)
+        .input("hipsInches", hips ?? null)
+        .input("recordedAt", recordedAt)
+        .input("notes", notes ?? null)
+        .query(`
+INSERT INTO [dbo].[body_measurements]
+  ([userId], [chestInches], [waistInches], [hipsInches], [recordedAt], [notes])
+VALUES
+  (@userId, @chestInches, @waistInches, @hipsInches, @recordedAt, @notes)
+        `);
+
+      const created = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP 1 [id], [userId], [chestInches], [waistInches], [hipsInches], [recordedAt], [notes], [createdAt]
+FROM [dbo].[body_measurements]
+WHERE [userId] = @userId
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      const row = created.recordset?.[0];
+      if (!row) return null;
+
+      return {
+        id: row.id,
+        userId: row.userId,
+        chestInches: row.chestInches,
+        waistInches: row.waistInches,
+        hipsInches: row.hipsInches,
+        recordedAt: Number(row.recordedAt),
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      } as BodyMeasurement;
+    } catch (error) {
+      console.error("[Database] Error adding body measurement (Azure SQL):", error);
+      return null;
+    }
+  }
 
   const result = await db.insert(bodyMeasurements).values({
     userId,
@@ -1191,7 +2598,36 @@ export async function addBodyMeasurement(
 
 export async function getBodyMeasurements(userId: number, limit: number = 100): Promise<BodyMeasurement[]> {
   const db = await getDb();
-  if (!db) return [];
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return [];
+
+    try {
+      const pool = await getAzureSqlPool();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .query<any>(`
+SELECT TOP (${limit}) [id], [userId], [chestInches], [waistInches], [hipsInches], [recordedAt], [notes], [createdAt]
+FROM [dbo].[body_measurements]
+WHERE [userId] = @userId
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      return (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        chestInches: row.chestInches,
+        waistInches: row.waistInches,
+        hipsInches: row.hipsInches,
+        recordedAt: Number(row.recordedAt),
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as BodyMeasurement[];
+    } catch (error) {
+      console.error("[Database] Error fetching body measurements (Azure SQL):", error);
+      return [];
+    }
+  }
 
   return db.select()
     .from(bodyMeasurements)
@@ -1202,10 +2638,197 @@ export async function getBodyMeasurements(userId: number, limit: number = 100): 
 
 export async function deleteBodyMeasurement(id: number, userId: number): Promise<boolean> {
   const db = await getDb();
-  if (!db) return false;
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return false;
+    try {
+      const pool = await getAzureSqlPool();
+      const result = await pool
+        .request()
+        .input("id", id)
+        .input("userId", userId)
+        .query(`DELETE FROM [dbo].[body_measurements] WHERE [id] = @id AND [userId] = @userId`);
+      return (result.rowsAffected?.[0] || 0) > 0;
+    } catch (error) {
+      console.error("[Database] Error deleting body measurement (Azure SQL):", error);
+      return false;
+    }
+  }
 
   const result = await db.delete(bodyMeasurements)
     .where(and(eq(bodyMeasurements.id, id), eq(bodyMeasurements.userId, userId)));
+
+  return (result as any).affectedRows > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Manual Glucose Entry
+// ---------------------------------------------------------------------------
+
+const MANUAL_GLUCOSE_SOURCE_NAME = "Manual Entry";
+
+async function ensureManualGlucoseSource(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    return getOrCreateGlucoseSource(userId, MANUAL_GLUCOSE_SOURCE_NAME);
+  }
+
+  const existing = await db
+    .select({ id: healthSources.id })
+    .from(healthSources)
+    .where(
+      and(
+        eq(healthSources.userId, userId),
+        eq(healthSources.displayName, MANUAL_GLUCOSE_SOURCE_NAME)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) return existing[0].id;
+
+  const result = await db.insert(healthSources).values({
+    userId,
+    provider: "custom_app",
+    category: "glucose",
+    status: "connected",
+    implementationStage: "custom",
+    authType: "custom",
+    displayName: MANUAL_GLUCOSE_SOURCE_NAME,
+    description: "Glucose readings entered manually by the user",
+    lastSyncStatus: "idle",
+  });
+  return (result as any).insertId as number;
+}
+
+export async function addManualGlucoseEntry(
+  userId: number,
+  mgdl: number,
+  readingAt: number,
+  notes?: string
+) {
+  const db = await getDb();
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) throw new Error("Database not available");
+    try {
+      const sourceId = await ensureManualGlucoseSource(userId);
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      await pool
+        .request()
+        .input("userId", userId)
+        .input("sourceId", sourceId)
+        .input("readingAt", readingAt)
+        .input("mgdl", mgdl)
+        .input("notes", notes ?? null)
+        .query(`
+INSERT INTO [dbo].[glucose_readings] ([userId], [sourceId], [readingAt], [mgdl], [notes])
+VALUES (@userId, @sourceId, @readingAt, @mgdl, @notes)
+        `);
+      return;
+    } catch (error) {
+      console.error("[Database] Error adding manual glucose (Azure SQL):", error);
+      throw new Error("Failed to save glucose reading");
+    }
+  }
+
+  const sourceId = await ensureManualGlucoseSource(userId);
+  await db.insert(glucoseReadings).values({
+    userId,
+    sourceId,
+    readingAt,
+    mgdl,
+    notes: notes ?? null,
+  });
+}
+
+export async function getTodayManualGlucoseEntries(
+  userId: number,
+  dayStart: number
+): Promise<GlucoseReading[]> {
+  const db = await getDb();
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return [];
+    try {
+      const sourceId = await ensureManualGlucoseSource(userId);
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("sourceId", sourceId)
+        .input("dayStart", dayStart)
+        .query<any>(`
+SELECT [id], [userId], [sourceId], [readingAt], [mgdl], [trend], [notes], [createdAt]
+FROM [dbo].[glucose_readings]
+WHERE [userId] = @userId AND [sourceId] = @sourceId AND [readingAt] >= @dayStart
+ORDER BY [readingAt] DESC, [id] DESC
+        `);
+
+      return (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        sourceId: row.sourceId,
+        readingAt: Number(row.readingAt),
+        mgdl: row.mgdl,
+        trend: row.trend,
+        mealContext: null,
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as GlucoseReading[];
+    } catch (error) {
+      console.error("[Database] Error fetching manual glucose (Azure SQL):", error);
+      return [];
+    }
+  }
+
+  const sourceId = await db
+    .select({ id: healthSources.id })
+    .from(healthSources)
+    .where(
+      and(
+        eq(healthSources.userId, userId),
+        eq(healthSources.displayName, MANUAL_GLUCOSE_SOURCE_NAME)
+      )
+    )
+    .limit(1);
+
+  if (sourceId.length === 0) return [];
+
+  return db
+    .select()
+    .from(glucoseReadings)
+    .where(
+      and(
+        eq(glucoseReadings.userId, userId),
+        eq(glucoseReadings.sourceId, sourceId[0].id),
+        gte(glucoseReadings.readingAt, dayStart)
+      )
+    )
+    .orderBy(desc(glucoseReadings.readingAt));
+}
+
+export async function deleteManualGlucoseEntry(id: number, userId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return false;
+    try {
+      const sourceId = await ensureManualGlucoseSource(userId);
+      const pool = await ensureGlucoseInfrastructureAzureSql();
+      const result = await pool
+        .request()
+        .input("id", id)
+        .input("userId", userId)
+        .input("sourceId", sourceId)
+        .query(`
+DELETE FROM [dbo].[glucose_readings]
+WHERE [id] = @id AND [userId] = @userId AND [sourceId] = @sourceId
+        `);
+      return (result.rowsAffected?.[0] || 0) > 0;
+    } catch (error) {
+      console.error("[Database] Error deleting manual glucose (Azure SQL):", error);
+      return false;
+    }
+  }
+
+  const result = await db.delete(glucoseReadings)
+    .where(and(eq(glucoseReadings.id, id), eq(glucoseReadings.userId, userId)));
 
   return (result as any).affectedRows > 0;
 }
@@ -1216,7 +2839,63 @@ export async function getBodyMeasurementTrends(userId: number, days: number = 30
   hips: { current?: number; previous?: number; change?: number };
 }> {
   const db = await getDb();
-  if (!db) return { chest: {}, waist: {}, hips: {} };
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return { chest: {}, waist: {}, hips: {} };
+
+    try {
+      const since = Date.now() - days * 24 * 60 * 60 * 1000;
+      const pool = await getAzureSqlPool();
+      const result = await pool
+        .request()
+        .input("userId", userId)
+        .input("since", since)
+        .query<any>(`
+SELECT [id], [userId], [chestInches], [waistInches], [hipsInches], [recordedAt], [notes], [createdAt]
+FROM [dbo].[body_measurements]
+WHERE [userId] = @userId AND [recordedAt] >= @since
+ORDER BY [recordedAt] DESC, [id] DESC
+        `);
+
+      const measurements = (result.recordset || []).map((row: any) => ({
+        id: row.id,
+        userId: row.userId,
+        chestInches: row.chestInches,
+        waistInches: row.waistInches,
+        hipsInches: row.hipsInches,
+        recordedAt: Number(row.recordedAt),
+        notes: row.notes,
+        createdAt: row.createdAt ? new Date(row.createdAt) : new Date(),
+      })) as BodyMeasurement[];
+
+      if (measurements.length === 0) {
+        return { chest: {}, waist: {}, hips: {} };
+      }
+
+      const latest = measurements[0];
+      const oldest = measurements[measurements.length - 1];
+
+      return {
+        chest: {
+          current: latest.chestInches ?? undefined,
+          previous: oldest.chestInches ?? undefined,
+          change: latest.chestInches && oldest.chestInches ? latest.chestInches - oldest.chestInches : undefined,
+        },
+        waist: {
+          current: latest.waistInches ?? undefined,
+          previous: oldest.waistInches ?? undefined,
+          change: latest.waistInches && oldest.waistInches ? latest.waistInches - oldest.waistInches : undefined,
+        },
+        hips: {
+          current: latest.hipsInches ?? undefined,
+          previous: oldest.hipsInches ?? undefined,
+          change: latest.hipsInches && oldest.hipsInches ? latest.hipsInches - oldest.hipsInches : undefined,
+        },
+      };
+    } catch (error) {
+      console.error("[Database] Error getting body measurement trends (Azure SQL):", error);
+      return { chest: {}, waist: {}, hips: {} };
+    }
+  }
 
   const since = Date.now() - days * 24 * 60 * 60 * 1000;
   const measurements = await db.select()

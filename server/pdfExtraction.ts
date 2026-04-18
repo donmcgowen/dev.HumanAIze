@@ -4,7 +4,7 @@
  * Extracts glucose readings and statistics from Dexcom Clarity PDF reports
  */
 
-const pdfParse = require("pdf-parse");
+import { PDFParse } from "pdf-parse";
 
 export interface ExtractedClarityData {
   averageGlucose?: number;
@@ -32,7 +32,9 @@ export interface ExtractedClarityData {
  */
 export async function extractTextFromPDF(pdfBuffer: Buffer): Promise<string> {
   try {
-    const data = await pdfParse(pdfBuffer);
+    const parser = new PDFParse({ data: pdfBuffer });
+    const data = await parser.getText();
+    await parser.destroy();
     return data.text;
   } catch (error) {
     throw new Error(`Failed to parse PDF: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -65,10 +67,15 @@ export function parseClarityReportText(text: string): ExtractedClarityData {
     data.maxGlucose = parseInt(maxMatch[1], 10);
   }
 
-  // Extract time in range (pattern: "Time in Range: XX%")
-  const tirMatch = text.match(/Time\s+in\s+Range[:\s]+(\d+(?:\.\d+)?)\s*%/i);
-  if (tirMatch) {
-    data.timeInRange = parseFloat(tirMatch[1]);
+  // Extract time in range, prioritizing explicit "XX% In Range" format.
+  const inRangeMatch = text.match(/(\d+(?:\.\d+)?)\s*%\s+In\s+Range/i);
+  if (inRangeMatch) {
+    data.timeInRange = parseFloat(inRangeMatch[1]);
+  } else {
+    const tirMatch = text.match(/Time\s+in\s+Range[:\s]+(\d+(?:\.\d+)?)\s*%/i);
+    if (tirMatch) {
+      data.timeInRange = parseFloat(tirMatch[1]);
+    }
   }
 
   // Extract time above range (pattern: "Time Above Range: XX%")
@@ -99,6 +106,19 @@ export function parseClarityReportText(text: string): ExtractedClarityData {
   const a1cMatch = text.match(/Estimated\s+A1C[:\s]+(\d+(?:\.\d+)?)\s*%/i);
   if (a1cMatch) {
     data.estimatedA1C = parseFloat(a1cMatch[1]);
+  }
+
+  // Some reports provide GMI instead of Estimated A1C
+  if (data.estimatedA1C === undefined) {
+    const gmiMatch = text.match(/GMI[:\s]+(\d+(?:\.\d+)?)\s*%/i);
+    if (gmiMatch) {
+      data.estimatedA1C = parseFloat(gmiMatch[1]);
+    }
+  }
+
+  // Final fallback: derive A1C estimate from average glucose
+  if (data.estimatedA1C === undefined && typeof data.averageGlucose === "number") {
+    data.estimatedA1C = Math.round((((data.averageGlucose / 28.7) + 2.15) * 100)) / 100;
   }
 
   // Extract report period dates

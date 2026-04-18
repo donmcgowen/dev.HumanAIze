@@ -3,13 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { Plus, Trash2, TrendingDown, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export function BodyMeasurementSection() {
   const utils = trpc.useUtils();
   const [isAdding, setIsAdding] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [chest, setChest] = useState("");
   const [waist, setWaist] = useState("");
   const [hips, setHips] = useState("");
@@ -198,43 +199,59 @@ export function BodyMeasurementSection() {
 
           {/* Measurements History */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Recent Measurements</h3>
-            {measurementsLoading ? (
-              <div className="text-sm text-muted-foreground text-center py-4">Loading measurements...</div>
-            ) : measurements && measurements.length > 0 ? (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {measurements.map((m) => (
-                  <div
-                    key={m.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-foreground">
-                        {new Date(m.recordedAt).toLocaleDateString()}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 space-y-1">
-                        {m.chestInches && <div>Chest: {m.chestInches.toFixed(1)}"</div>}
-                        {m.waistInches && <div>Waist: {m.waistInches.toFixed(1)}"</div>}
-                        {m.hipsInches && <div>Hips: {m.hipsInches.toFixed(1)}"</div>}
-                        {m.notes && <div className="text-xs italic mt-1">{m.notes}</div>}
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => deleteMutation.mutate({ entryId: m.id })}
-                      disabled={deleteMutation.isPending}
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+            <button
+              type="button"
+              onClick={() => setIsHistoryExpanded(!isHistoryExpanded)}
+              className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border hover:bg-muted/50 transition-colors"
+            >
+              <h3 className="text-sm font-semibold text-foreground">
+                Recent Measurements {measurements && measurements.length > 0 ? `(${measurements.length})` : ""}
+              </h3>
+              {isHistoryExpanded ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+
+            {isHistoryExpanded && (
+              measurementsLoading ? (
+                <div className="text-sm text-muted-foreground text-center py-4">Loading measurements...</div>
+              ) : measurements && measurements.length > 0 ? (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {measurements.map((m) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border hover:bg-muted/50 transition-colors"
                     >
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground text-center py-6 rounded-lg bg-muted/30 border border-border">
-                No measurements recorded yet. Start tracking your body measurements!
-              </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-foreground">
+                          {new Date(m.recordedAt).toLocaleDateString()}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 space-y-1">
+                          {m.chestInches && <div>Chest: {m.chestInches.toFixed(1)}"</div>}
+                          {m.waistInches && <div>Waist: {m.waistInches.toFixed(1)}"</div>}
+                          {m.hipsInches && <div>Hips: {m.hipsInches.toFixed(1)}"</div>}
+                          {m.notes && <div className="text-xs italic mt-1">{m.notes}</div>}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => deleteMutation.mutate({ entryId: m.id })}
+                        disabled={deleteMutation.isPending}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-6 rounded-lg bg-muted/30 border border-border">
+                  No measurements recorded yet. Start tracking your body measurements!
+                </div>
+              )
             )}
           </div>
         </CardContent>

@@ -82,7 +82,22 @@ function parseConnectionString(connectionString: string): sql.config {
         config.options.trustServerCertificate = value.toLowerCase() === "true";
         break;
       case "connection timeout":
-        config.options.connectTimeout = parseInt(value, 10);
+        // ADO-style connection strings use seconds for Connection Timeout.
+        // mssql expects milliseconds for connectTimeout.
+        {
+          const timeoutSeconds = parseInt(value, 10);
+          if (!Number.isNaN(timeoutSeconds) && timeoutSeconds > 0) {
+            config.options.connectTimeout = timeoutSeconds * 1000;
+          }
+        }
+        break;
+      case "connect timeout":
+        {
+          const timeoutSeconds = parseInt(value, 10);
+          if (!Number.isNaN(timeoutSeconds) && timeoutSeconds > 0) {
+            config.options.connectTimeout = timeoutSeconds * 1000;
+          }
+        }
         break;
     }
   }

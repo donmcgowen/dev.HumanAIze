@@ -8,7 +8,7 @@ import { getLoginUrl } from "@/const";
 import { AlertCircle, TrendingUp } from "lucide-react";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [, navigate] = useLocation();
@@ -18,13 +18,13 @@ export default function Login() {
     e.preventDefault();
     setError("");
 
-    if (!username || !password) {
-      setError("Please enter username and password");
+    if (!email || !password) {
+      setError("Please enter email and password");
       return;
     }
 
     try {
-      await loginMutation.mutateAsync({ username, password });
+      await loginMutation.mutateAsync({ username: email, password });
       navigate("/");
     } catch (err: any) {
       setError(err.message || "Login failed");
@@ -46,7 +46,7 @@ export default function Login() {
         <Card className="border border-white/10 bg-slate-900/80 backdrop-blur">
           <CardHeader>
             <CardTitle className="text-white">Sign In</CardTitle>
-            <CardDescription>Enter your username and password to continue</CardDescription>
+            <CardDescription>Enter your email and password to continue</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -58,15 +58,15 @@ export default function Login() {
               )}
 
               <div className="space-y-2">
-                <label htmlFor="username" className="text-sm font-medium text-slate-300">
-                  Username
+                <label htmlFor="email" className="text-sm font-medium text-slate-300">
+                  Email Address
                 </label>
                 <Input
-                  id="username"
-                  type="text"
-                  placeholder="Enter your username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   disabled={loginMutation.isPending}
                   className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
                 />
@@ -101,13 +101,13 @@ export default function Login() {
         {/* Signup CTA */}
         <Card className="border border-white/10 bg-slate-900/50">
           <CardContent className="pt-5 pb-5 text-center">
-            <p className="text-slate-400 text-sm mb-3">New to HumanAIze?</p>
+            <p className="text-slate-400 text-sm mb-3">Or sign in with your Microsoft account</p>
             <Button
               variant="outline"
               className="w-full border-cyan-500/40 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 font-semibold"
               onClick={() => window.location.href = getLoginUrl()}
             >
-              Create a Free Account
+              Sign in with Microsoft
             </Button>
           </CardContent>
         </Card>

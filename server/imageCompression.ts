@@ -1,4 +1,15 @@
-import sharp from "sharp";
+// sharp is a native module — loaded dynamically so the server starts even if
+// the Linux binary isn't present (image compression is silently skipped).
+let sharpLib: typeof import("sharp") | null = null;
+async function getSharp() {
+  if (sharpLib) return sharpLib;
+  try {
+    sharpLib = (await import("sharp")).default as unknown as typeof import("sharp");
+    return sharpLib;
+  } catch {
+    return null;
+  }
+}
 
 const MAX_SIZE_MB = 1;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
@@ -9,7 +20,13 @@ const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
  * @param mimeType - Image MIME type (e.g., 'image/jpeg')
  * @returns Compressed image buffer
  */
-export async function compressImage(buffer: Buffer, mimeType: string = "image/jpeg"): Promise<Buffer> {
+export async function compressImage(buffer: Buffer, _mimeType: string = "image/jpeg"): Promise<Buffer> {
+  const sharp = await getSharp();
+  if (!sharp) {
+    console.warn("[Image Compression] sharp not available — returning original buffer");
+    return buffer;
+  }
+
   try {
     // Start with 80% quality and adjust if needed
     let quality = 80;
@@ -74,6 +91,10 @@ export async function compressImage(buffer: Buffer, mimeType: string = "image/jp
  * @returns Object with width and height
  */
 export async function getImageDimensions(buffer: Buffer): Promise<{ width: number; height: number }> {
+  const sharp = await getSharp();
+  if (!sharp) {
+    return { width: 0, height: 0 };
+  }
   try {
     const metadata = await sharp(buffer).metadata();
     return {

@@ -11,6 +11,10 @@ interface ImportResult {
   importedCount: number;
   skippedCount: number;
   errors: string[];
+  trends?: {
+    direction: "rising" | "falling" | "stable";
+    changeMgdl: number;
+  };
   statistics?: {
     count: number;
     average: number;
@@ -295,6 +299,12 @@ export function ClarityCSVUpload() {
                   <div className="text-xs text-slate-400 mb-2">Data Summary</div>
                   <div className="space-y-1 text-sm text-slate-300">
                     <p>Total Readings: {importResult.statistics.count}</p>
+                    {importResult.trends && (
+                      <p>
+                        Trend: {importResult.trends.direction} ({importResult.trends.changeMgdl > 0 ? "+" : ""}
+                        {importResult.trends.changeMgdl} mg/dL)
+                      </p>
+                    )}
                     {importResult.statistics.timeRange.start && (
                       <p>Period: {new Date(importResult.statistics.timeRange.start).toLocaleDateString()} to {new Date(importResult.statistics.timeRange.end).toLocaleDateString()}</p>
                     )}

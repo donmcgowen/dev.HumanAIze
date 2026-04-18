@@ -41,6 +41,7 @@ const MEAL_TYPES: { value: MealType; label: string }[] = [
 ];
 
 export function FoodLogger() {
+  const utils = trpc.useUtils();
   // State declarations first
   const [searchQuery, setSearchQuery] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
@@ -93,7 +94,47 @@ export function FoodLogger() {
   );
 
   // Fetch user profile for daily goals
-  const { data: userProfile } = trpc.profile.get.useQuery();
+  const { data: userProfile } = trpc.profile.get.useQuery(undefined, {
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+
+  const toPositiveNumberOrNull = (value: unknown): number | null => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+    return null;
+  };
+
+  const profileMacroTargets = {
+    calories: toPositiveNumberOrNull(userProfile?.dailyCalorieTarget),
+    protein: toPositiveNumberOrNull(userProfile?.dailyProteinTarget),
+    carbs: toPositiveNumberOrNull(userProfile?.dailyCarbsTarget),
+    fat: toPositiveNumberOrNull(userProfile?.dailyFatTarget),
+  };
+
+  const targetTotals = {
+    calories: profileMacroTargets.calories ?? 2000,
+    protein: profileMacroTargets.protein ?? 150,
+    carbs: profileMacroTargets.carbs ?? 200,
+    fat: profileMacroTargets.fat ?? 65,
+  };
+
+  const hasAnyProfileTarget =
+    profileMacroTargets.calories !== null ||
+    profileMacroTargets.protein !== null ||
+    profileMacroTargets.carbs !== null ||
+    profileMacroTargets.fat !== null;
+
+  const missingMacroTargets: string[] = [];
+  if (profileMacroTargets.calories === null) missingMacroTargets.push("calories");
+  if (profileMacroTargets.protein === null) missingMacroTargets.push("protein");
+  if (profileMacroTargets.carbs === null) missingMacroTargets.push("carbs");
+  if (profileMacroTargets.fat === null) missingMacroTargets.push("fat");
 
   // Fetch recently added foods
   const { data: recentFoods } = trpc.food.getRecent.useQuery({ limit: 5 });
@@ -109,10 +150,10 @@ export function FoodLogger() {
         fatGrams: log.fatGrams,
         mealType: log.mealType as "breakfast" | "lunch" | "dinner" | "snack",
       })),
-      dailyCalorieGoal: userProfile?.dailyCalorieTarget || 2000,
-      dailyProteinGoal: userProfile?.dailyProteinTarget || 150,
-      dailyCarbGoal: userProfile?.dailyCarbsTarget || 200,
-      dailyFatGoal: userProfile?.dailyFatTarget || 65,
+      dailyCalorieGoal: targetTotals.calories,
+      dailyProteinGoal: targetTotals.protein,
+      dailyCarbGoal: targetTotals.carbs,
+      dailyFatGoal: targetTotals.fat,
       healthObjectives: ["balanced nutrition"],
     },
     { enabled: (foodLogs?.length || 0) > 0 }
@@ -220,10 +261,32 @@ export function FoodLogger() {
 
   const handleBarcodeScanned = async (barcode: string) => {
     setBarcodeLoading(true);
+
+    const normalizeQuantityUnit = (unit?: string): string => {
+      const normalized = (unit || "").toLowerCase().trim();
+      if (["g", "gram", "grams"].includes(normalized)) return "grams";
+      if (["oz", "ounce", "ounces"].includes(normalized)) return "oz";
+      if (["lb", "lbs", "pound", "pounds"].includes(normalized)) return "lbs";
+      if (["cup", "cups"].includes(normalized)) return "cup";
+      if (["serving", "servings"].includes(normalized)) return "serving";
+      return "grams";
+    };
+
+    const parseServingSizeAmount = (servingSize?: string): number => {
+      if (!servingSize) return 100;
+      const match = servingSize.match(/(\d+(?:\.\d+)?)/);
+      if (!match) return 100;
+      const parsed = Number(match[1]);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+    };
+
     try {
-      const product = await trpc.useUtils().food.lookupBarcode.fetch({ barcode });
+      const product = await utils.food.lookupBarcode.fetch({ barcode });
       if (product) {
         const p = product as any;
+        const parsedServingAmount = parseServingSizeAmount(product.servingSize);
+        const normalizedUnit = normalizeQuantityUnit(product.servingUnit);
+
         setSelectedFood({
           fdcId: barcode,
           description: product.name,
@@ -231,11 +294,11 @@ export function FoodLogger() {
           proteinGrams: p.proteinGrams || product.protein || 0,
           carbsGrams: p.carbsGrams || product.carbs || 0,
           fatGrams: p.fatGrams || product.fat || 0,
-          servingSize: parseInt(product.servingSize),
-          servingUnit: product.servingUnit,
+          servingSize: parsedServingAmount,
+          servingUnit: normalizedUnit,
         });
-        setQuantity(product.servingSize);
-        setQuantityUnit(product.servingUnit);
+        setQuantity(String(parsedServingAmount));
+        setQuantityUnit(normalizedUnit);
         setUseManualEntry(false);
         toast.success(`Found: ${product.name}`);
       } else {
@@ -254,6 +317,8 @@ export function FoodLogger() {
     if (!qty || isNaN(qty)) return 0;
 
     switch (quantityUnit) {
+      case "g":
+        return qty;
       case "oz":
         return qty * 28.35;
       case "lbs":
@@ -280,7 +345,10 @@ export function FoodLogger() {
 
     if (selectedFood && quantity) {
       const quantityInGrams = getQuantityInGrams();
-      const servingSize = typeof selectedFood.servingSize === 'string' ? 100 : selectedFood.servingSize;
+      const rawServingSize = typeof selectedFood.servingSize === 'string'
+        ? Number(selectedFood.servingSize)
+        : selectedFood.servingSize;
+      const servingSize = Number.isFinite(rawServingSize) && rawServingSize > 0 ? rawServingSize : 100;
       const scale = quantityInGrams / servingSize;
       return {
         protein: (selectedFood.proteinGrams || selectedFood.protein || 0) * scale,
@@ -306,6 +374,16 @@ export function FoodLogger() {
       { protein: 0, carbs: 0, fat: 0, calories: 0 }
     );
   }, [foodLogs]);
+
+  const remainingTotals = useMemo(
+    () => ({
+      calories: Math.max(0, targetTotals.calories - dailyTotals.calories),
+      protein: Math.max(0, targetTotals.protein - dailyTotals.protein),
+      carbs: Math.max(0, targetTotals.carbs - dailyTotals.carbs),
+      fat: Math.max(0, targetTotals.fat - dailyTotals.fat),
+    }),
+    [dailyTotals, targetTotals]
+  );
 
   // Group foods by meal type
   const foodsByMeal = useMemo(() => {
@@ -350,6 +428,7 @@ export function FoodLogger() {
   }, [foodsByMeal]);
 
   const handleAddFoodFromModal = (food: any) => {
+    const sugarGrams = Number(food.sugarGrams || 0);
     addFoodLog.mutate({
       foodName: food.foodName,
       servingSize: food.servingSize,
@@ -359,6 +438,7 @@ export function FoodLogger() {
       fatGrams: Math.round(food.fatGrams * 10) / 10,
       mealType,
       loggedAt: Date.now(),
+      notes: sugarGrams > 0 ? `Sugar: ${Math.round(sugarGrams * 10) / 10}g` : undefined,
     });
     toast.success(`Added ${food.foodName} to ${mealType}`);
   };
@@ -754,7 +834,7 @@ export function FoodLogger() {
       </Card>
 
       {/* Daily Summary */}
-      <Card className="border-white/10 bg-white/[0.03]">
+      <Card id="daily-targets" className="border-white/10 bg-white/[0.03]">
         <CardHeader>
           <CardTitle>Daily Totals</CardTitle>
         </CardHeader>
@@ -775,6 +855,59 @@ export function FoodLogger() {
             <div className="bg-white/5 p-3 rounded">
               <div className="text-xs text-slate-400">Calories</div>
               <div className="text-lg font-bold text-white">{dailyTotals.calories.toFixed(0)}</div>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 p-4 rounded border border-white/10">
+            <p className="text-slate-300 font-semibold mb-3">Daily Targets</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+              <div>
+                <p className="text-slate-400 text-sm">Calories</p>
+                <p className="text-xl font-bold text-blue-400">{targetTotals.calories}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Protein</p>
+                <p className="text-xl font-bold text-red-400">{targetTotals.protein}g</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Carbs</p>
+                <p className="text-xl font-bold text-yellow-400">{targetTotals.carbs}g</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Fat</p>
+                <p className="text-xl font-bold text-orange-400">{targetTotals.fat}g</p>
+              </div>
+            </div>
+
+            {!hasAnyProfileTarget && (
+              <p className="text-xs text-slate-500 mb-3">
+                Using default targets (2000/150/200/65). Update your profile to sync personalized values.
+              </p>
+            )}
+
+            {hasAnyProfileTarget && missingMacroTargets.length > 0 && (
+              <p className="text-xs text-slate-500 mb-3">
+                Some profile targets are missing ({missingMacroTargets.join(", ")}), so defaults are used for those only.
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-white/10">
+              <div>
+                <p className="text-slate-400 text-sm">Remaining Calories</p>
+                <p className="text-lg font-semibold text-cyan-300">{remainingTotals.calories.toFixed(0)}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Remaining Protein</p>
+                <p className="text-lg font-semibold text-cyan-300">{remainingTotals.protein.toFixed(1)}g</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Remaining Carbs</p>
+                <p className="text-lg font-semibold text-cyan-300">{remainingTotals.carbs.toFixed(1)}g</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Remaining Fat</p>
+                <p className="text-lg font-semibold text-cyan-300">{remainingTotals.fat.toFixed(1)}g</p>
+              </div>
             </div>
           </div>
           
@@ -828,14 +961,14 @@ export function FoodLogger() {
       <FoodInsights
         insights={insights || null}
         isLoading={insightsLoading}
-        dailyCalorieGoal={userProfile?.dailyCalorieTarget || 2000}
+        dailyCalorieGoal={targetTotals.calories}
         currentCalories={dailyTotals.calories}
         currentProtein={dailyTotals.protein}
-        dailyProteinGoal={userProfile?.dailyProteinTarget || 150}
+        dailyProteinGoal={targetTotals.protein}
         currentCarbs={dailyTotals.carbs}
-        dailyCarbGoal={userProfile?.dailyCarbsTarget || 200}
+        dailyCarbGoal={targetTotals.carbs}
         currentFat={dailyTotals.fat}
-        dailyFatGoal={userProfile?.dailyFatTarget || 65}
+        dailyFatGoal={targetTotals.fat}
       />
     </div>
   );

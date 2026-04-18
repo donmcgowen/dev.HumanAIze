@@ -7,12 +7,12 @@ export type FitnessGoal = "lose_fat" | "build_muscle" | "maintain";
 export type ActivityLevel = "sedentary" | "lightly_active" | "moderately_active" | "very_active" | "extremely_active";
 
 export interface MacroCalculatorInput {
-  weightKg: number;
-  heightCm: number;
+  weightLbs: number;
+  heightIn: number;
   ageYears: number;
   fitnessGoal: FitnessGoal;
   activityLevel: ActivityLevel;
-  goalWeightKg?: number;
+  goalWeightLbs?: number;
   targetDateMs?: number;
 }
 
@@ -24,6 +24,14 @@ export interface MacroSuggestion {
   proteinPercentage: number;
   carbsPercentage: number;
   fatPercentage: number;
+}
+
+function lbsToKg(lbs: number): number {
+  return lbs * 0.45359237;
+}
+
+function inchesToCm(inches: number): number {
+  return inches * 2.54;
 }
 
 /**
@@ -109,7 +117,10 @@ function calculateGoalAdjustedCalories(
  * Calculate macro recommendations based on fitness goal
  */
 export function calculateMacros(input: MacroCalculatorInput): MacroSuggestion {
-  const { weightKg, heightCm, ageYears, fitnessGoal, activityLevel, goalWeightKg, targetDateMs } = input;
+  const { weightLbs, heightIn, ageYears, fitnessGoal, activityLevel, goalWeightLbs, targetDateMs } = input;
+  const weightKg = lbsToKg(weightLbs);
+  const heightCm = inchesToCm(heightIn);
+  const goalWeightKg = typeof goalWeightLbs === "number" ? lbsToKg(goalWeightLbs) : undefined;
 
   // Calculate BMR and TDEE
   const bmr = calculateBMR(weightKg, heightCm, ageYears);

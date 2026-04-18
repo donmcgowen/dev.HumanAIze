@@ -3,10 +3,18 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 import { Activity, Clock, Zap, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { WeightTracker } from "@/components/WeightTracker";
+import { StepCounter } from "@/components/StepCounter";
 
 export default function Dashboard() {
-  const { data: dashboard, isLoading } = trpc.health.dashboard.useQuery({ rangeDays: 14 });
+  const {
+    data: dashboard,
+    isLoading,
+    isError,
+    refetch: refetchDashboard,
+  } = trpc.health.dashboard.useQuery({ rangeDays: 14 });
   const { data: syncData } = trpc.sync.status.useQuery(undefined, { refetchInterval: 30000 });
+  const { data: cgmInsights } = trpc.cgm.getInsights.useQuery();
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   // Fetch today's food macros
@@ -36,23 +44,13 @@ export default function Dashboard() {
     }
   }, [syncData]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-slate-400">Loading dashboard...</div>
-      </div>
-    );
-  }
-
-  if (!dashboard) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-slate-400">No data available</div>
-      </div>
-    );
-  }
-
-  const { summary, chart, sourcesByCategory } = dashboard;
+  const chart = dashboard?.chart ?? [];
+  const sourcesByCategory = dashboard?.sourcesByCategory ?? {
+    glucose: [],
+    activity: [],
+    sleep: [],
+    nutrition: [],
+  };
 
   // Calculate macro totals from today's food logs
   const macroTotals = todayFoodLogs?.reduce(
@@ -65,48 +63,120 @@ export default function Dashboard() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   ) || { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
+  const macroTargets = {
+    calories: dashboard?.dailyTargets?.calories ?? 2000,
+    protein: dashboard?.dailyTargets?.protein ?? 150,
+    carbs: dashboard?.dailyTargets?.carbs ?? 200,
+    fat: dashboard?.dailyTargets?.fat ?? 65,
+  };
+
+  const hasAnyProfileMacroTarget = dashboard?.dailyTargets?.hasAnyProfileTarget ?? false;
+  const missingMacroTargets = dashboard?.dailyTargets?.missingProfileTargets ?? ["calories", "protein", "carbs", "fat"];
+
+  const macrosRemaining = {
+    calories: Math.max(0, Math.round(macroTargets.calories - macroTotals.calories)),
+    protein: Math.max(0, Math.round(macroTargets.protein - macroTotals.protein)),
+    carbs: Math.max(0, Math.round(macroTargets.carbs - macroTotals.carbs)),
+    fat: Math.max(0, Math.round(macroTargets.fat - macroTotals.fat)),
+  };
+
   return (
     <div className="space-y-8 p-6 w-full max-w-full">
       {/* Header */}
       <div className="space-y-2">
-        <h1 className="text-3xl font-bold">Command Center</h1>
+        <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-slate-400">
           Unified glucose, activity, nutrition, and sleep metrics from your connected sources.
         </p>
+        {(isLoading || isError || !dashboard) && (
+          <div className="flex flex-wrap items-center gap-3 rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            <span>
+              {isLoading
+                ? "Loading dashboard data. Core cards are still shown."
+                : "Dashboard data is temporarily unavailable. Core cards are still shown."}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => refetchDashboard()}
+              className="border-amber-300/40 text-amber-100 hover:bg-amber-400/20"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Retry
+            </Button>
+          </div>
+        )}
         {lastSyncTime && (
           <p className="text-sm text-slate-500">Last sync: {lastSyncTime}</p>
         )}
       </div>
 
-      {/* Macros Grid */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
-        {/* Calories - Large card */}
-        <div className="sm:col-span-2 bg-slate-900 border border-slate-800 rounded-lg p-6">
-          <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Calories</div>
-          <div className="text-4xl font-bold text-orange-400">{Math.round(macroTotals.calories)}</div>
-          <div className="text-xs text-slate-500 mt-1">kcal today</div>
-        </div>
+      {/* Weight Progress */}
+      <div className="space-y-3">
+        <h2 className="text-xl font-semibold text-white">Weight Progress</h2>
+        <WeightTracker />
+      </div>
 
-        {/* Protein */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-          <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Protein</div>
-          <div className="text-2xl font-bold text-blue-400">{Math.round(macroTotals.protein)}</div>
-          <div className="text-xs text-slate-500 mt-1">g</div>
-        </div>
+      {/* AI Dexcom/Clarity Insights */}
+      <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+          <p className="text-xs text-slate-400 uppercase tracking-wide mb-3">AI Dexcom/Clarity Insights</p>
+          {cgmInsights && cgmInsights.length > 0 ? (
+            <div className="space-y-2">
+              {cgmInsights.slice(0, 2).map((insight, idx) => (
+                <div key={`${insight.title}-${idx}`} className="rounded bg-slate-800 p-3">
+                  <p className="text-sm font-semibold text-cyan-300">{insight.title}</p>
+                  <p className="text-xs text-slate-300 mt-1">{insight.message}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Import Dexcom Clarity CSV/PDF to generate AI glucose insights here.</p>
+          )}
+      </div>
 
-        {/* Carbs */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-          <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Carbs</div>
-          <div className="text-2xl font-bold text-green-400">{Math.round(macroTotals.carbs)}</div>
-          <div className="text-xs text-slate-500 mt-1">g</div>
-        </div>
+      {/* Daily Macro Target */}
+      <div className="space-y-3">
+        <h2 className="text-xl font-semibold text-white">Daily Macro Target</h2>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Calories</div>
+            <div className="text-2xl font-bold text-orange-400">{Math.round(macroTotals.calories)} / {macroTargets.calories}</div>
+            <div className="text-xs text-slate-500 mt-1">{macrosRemaining.calories} kcal remaining</div>
+          </div>
 
-        {/* Fat */}
-        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-          <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Fat</div>
-          <div className="text-2xl font-bold text-yellow-400">{Math.round(macroTotals.fat)}</div>
-          <div className="text-xs text-slate-500 mt-1">g</div>
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Protein</div>
+            <div className="text-2xl font-bold text-blue-400">{Math.round(macroTotals.protein)}g / {macroTargets.protein}g</div>
+            <div className="text-xs text-slate-500 mt-1">{macrosRemaining.protein} g remaining</div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Carbs</div>
+            <div className="text-2xl font-bold text-green-400">{Math.round(macroTotals.carbs)}g / {macroTargets.carbs}g</div>
+            <div className="text-xs text-slate-500 mt-1">{macrosRemaining.carbs} g remaining</div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+            <div className="text-xs text-slate-400 uppercase tracking-wide mb-2">Fat</div>
+            <div className="text-2xl font-bold text-yellow-400">{Math.round(macroTotals.fat)}g / {macroTargets.fat}g</div>
+            <div className="text-xs text-slate-500 mt-1">{macrosRemaining.fat} g remaining</div>
+          </div>
         </div>
+        {!hasAnyProfileMacroTarget && (
+          <p className="text-xs text-slate-500">Using default targets (2000/150/200/65). Update your profile to personalize.</p>
+        )}
+        {hasAnyProfileMacroTarget && missingMacroTargets.length > 0 && (
+          <p className="text-xs text-slate-500">
+            Some profile targets are missing ({missingMacroTargets.join(", ")}), so defaults are used for those only.
+          </p>
+        )}
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-3">
+        <h2 className="text-xl font-semibold text-white">Step Counter</h2>
+        <StepCounter />
       </div>
 
       {/* Chart */}

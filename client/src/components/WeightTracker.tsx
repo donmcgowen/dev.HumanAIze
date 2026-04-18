@@ -10,7 +10,8 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function WeightTracker() {
   const [open, setOpen] = useState(false);
-  const [weight, setWeight] = useState("");
+  const [startingWeightInput, setStartingWeightInput] = useState("");
+  const [currentWeightInput, setCurrentWeightInput] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState("");
   const [isLogsExpanded, setIsLogsExpanded] = useState(false);
@@ -22,13 +23,6 @@ export function WeightTracker() {
 
   // Mutation to add weight entry
   const addWeightMutation = trpc.weight.addEntry.useMutation({
-    onSuccess: () => {
-      setWeight("");
-      setNotes("");
-      setError("");
-      setOpen(false);
-      refetchEntries();
-    },
     onError: (error) => {
       setError(error.message || "Failed to add weight entry");
     },
@@ -41,25 +35,70 @@ export function WeightTracker() {
     },
   });
 
-  const handleAddWeight = () => {
-    if (!weight || isNaN(Number(weight))) {
-      setError("Please enter a valid weight");
+  const handleAddWeight = async () => {
+    const hasStarting = startingWeightInput.trim().length > 0;
+    const hasCurrent = currentWeightInput.trim().length > 0;
+
+    if (!hasStarting && !hasCurrent) {
+      setError("Please enter a starting and/or current weight");
       return;
     }
 
-    const weightNum = Math.round(Number(weight)); // Ensure whole number
-    const now = Date.now();
+    if (hasStarting && isNaN(Number(startingWeightInput))) {
+      setError("Please enter a valid starting weight");
+      return;
+    }
 
-    addWeightMutation.mutate({
-      weightLbs: weightNum,
-      recordedAt: now,
-      notes: notes || undefined,
-    });
+    if (hasCurrent && isNaN(Number(currentWeightInput))) {
+      setError("Please enter a valid current weight");
+      return;
+    }
+
+    const now = Date.now();
+    const operations: Array<Promise<any>> = [];
+
+    if (hasStarting) {
+      const startingWeightNum = Math.round(Number(startingWeightInput));
+      operations.push(
+        addWeightMutation.mutateAsync({
+          weightLbs: startingWeightNum,
+          // Keep starting entry chronologically older than current if both are entered.
+          recordedAt: hasCurrent ? now - 1000 : now,
+          notes: notes ? `[START] ${notes}` : "[START]",
+        })
+      );
+    }
+
+    if (hasCurrent) {
+      const currentWeightNum = Math.round(Number(currentWeightInput));
+      operations.push(
+        addWeightMutation.mutateAsync({
+          weightLbs: currentWeightNum,
+          recordedAt: now,
+          notes: notes ? `[CURRENT] ${notes}` : "[CURRENT]",
+        })
+      );
+    }
+
+    try {
+      await Promise.all(operations);
+      setStartingWeightInput("");
+      setCurrentWeightInput("");
+      setNotes("");
+      setError("");
+      setOpen(false);
+      refetchEntries();
+    } catch {
+      // Error state is set in mutation onError.
+    }
   };
 
   // Calculate weight change
-  const currentWeight = entries.length > 0 ? entries[0].weightLbs : null;
-  const startWeight = entries.length > 0 ? entries[entries.length - 1].weightLbs : null;
+  const taggedCurrent = entries.find((e) => (e.notes || "").startsWith("[CURRENT]"));
+  const taggedStart = entries.find((e) => (e.notes || "").startsWith("[START]"));
+
+  const currentWeight = taggedCurrent?.weightLbs ?? (entries.length > 0 ? entries[0].weightLbs : null);
+  const startWeight = taggedStart?.weightLbs ?? (entries.length > 0 ? entries[entries.length - 1].weightLbs : null);
   const weightChange = currentWeight && startWeight ? currentWeight - startWeight : 0;
 
   // Format estimated completion date
@@ -122,21 +161,41 @@ export function WeightTracker() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="weight" className="text-slate-300">
-                Weight (lbs) - Whole numbers only
+              <Label htmlFor="startingWeight" className="text-slate-300">
+                Starting Weight (lbs) - Whole numbers only
               </Label>
               <Input
-                id="weight"
+                id="startingWeight"
                 type="number"
                 inputMode="numeric"
                 pattern="[0-9]*"
                 placeholder="e.g., 180"
-                value={weight}
+                value={startingWeightInput}
                 onChange={(e) => {
                   const val = e.target.value;
                   // Only allow whole numbers
                   if (val === "" || /^\d+$/.test(val)) {
-                    setWeight(val);
+                    setStartingWeightInput(val);
+                  }
+                }}
+                className="mt-2 bg-slate-800 border-slate-600 text-white"
+              />
+            </div>
+            <div>
+              <Label htmlFor="currentWeight" className="text-slate-300">
+                Current Weight (lbs) - Whole numbers only
+              </Label>
+              <Input
+                id="currentWeight"
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="e.g., 190"
+                value={currentWeightInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "" || /^\d+$/.test(val)) {
+                    setCurrentWeightInput(val);
                   }
                 }}
                 className="mt-2 bg-slate-800 border-slate-600 text-white"

@@ -23,23 +23,54 @@ import {
 } from "./healthEngine";
 import { storeSourceCredentials } from "./credentials";
 import { syncAllSources } from "./dataImport";
-import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory, addWeightEntry, getWeightEntries, deleteWeightEntry, getWeightProgressData, getCGMStats, getCGMDailyAverages, getRecentFoodLogsForInsights, addBodyMeasurement, getBodyMeasurements, deleteBodyMeasurement, getBodyMeasurementTrends } from "./db";
+import { getUserProfile, upsertUserProfile, addFoodLog, getFoodLogsForDay, getRecentFoods, deleteFoodLog, updateFoodLog, addFavoriteFood, getFavoriteFoods, deleteFavoriteFood, createMealTemplate, getMealTemplates, getMealTemplate, updateMealTemplate, deleteMealTemplate, getMacroTrends, getGoalProgress, getCachedFoodSearchResults, cacheFoodSearchResults, addProgressPhoto, getProgressPhotos, deleteProgressPhoto, updateProgressPhoto, addGlucoseReadings, getGlucoseReadingsForDateRange, calculateGlucoseStatistics, logStepsForDay, getTodaySteps, getStepHistory, addWeightEntry, getWeightEntries, deleteWeightEntry, getWeightProgressData, addWorkoutEntry, getWorkoutEntries, deleteWorkoutEntry, getCGMStats, getCGMDailyAverages, getRecentFoodLogsForInsights, addBodyMeasurement, getBodyMeasurements, deleteBodyMeasurement, getBodyMeasurementTrends, addManualGlucoseEntry, getTodayManualGlucoseEntries, deleteManualGlucoseEntry, getOrCreateGlucoseSource } from "./db";
 import { searchUSDAFoods } from "./usda";
 import { getSyncStatus } from "./backgroundSync";
 import { lookupBarcodeProduct, getFoodVariant } from "./barcode";
 import { generateFoodInsights, type DailyMacros } from "./insights";
 import { getMealSuggestions, getMealSuggestionsByCategory } from "@shared/mealSuggestions";
 import { parseClarityCSV, validateClarityCSV, calculateReadingStats, type GlucoseReading } from "./clarityImport";
+import { extractTextFromPDF, parseClarityReportText, validateClarityPDF } from "./pdfExtraction";
 import { recognizeFoodFromPhoto, recognizeFoodFromVoice, recognizeFoodFromPhotoAndVoice } from "./foodRecognition";
 
 import { storagePut } from "./storage";
 import { analyzeMealWithAI, type MealData, type DailyTargets } from "./mealAnalysis";
 import { searchFoodWithGemini, calculateMacrosForServing } from "./geminiFood";
 import { getLocalCachedFood, saveLocalCachedFood } from "./localFoodCache";
+import { searchOpenFoodFactsByName } from "./openFoodFacts";
 
 const rangeInput = z.object({
   rangeDays: z.number().int().min(7).max(30).default(14),
 });
+
+const workoutMetMap: Record<string, number> = {
+  cardio: 8,
+  running: 9.8,
+  cycling: 7.5,
+  swimming: 8.3,
+  hiit: 9,
+  strength: 6,
+  yoga: 3,
+  pilates: 3.5,
+  walking: 3.8,
+  sports: 7,
+};
+
+function estimateCaloriesWithMet(
+  exerciseType: string,
+  durationMinutes: number,
+  weightLbs: number,
+  intensity: "light" | "moderate" | "intense"
+) {
+  const typeKey = exerciseType.toLowerCase();
+  const baseMet = workoutMetMap[typeKey] || 6;
+  const intensityFactor = intensity === "light" ? 0.8 : intensity === "intense" ? 1.2 : 1;
+  const met = baseMet * intensityFactor;
+  const weightKg = weightLbs * 0.453592;
+
+  const calories = (met * 3.5 * weightKg / 200) * durationMinutes;
+  return Math.max(1, Math.round(calories));
+}
 
 import { z } from "zod";
 
@@ -141,7 +172,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         try {
-          const photo = await updateProgressPhoto(ctx.user.id, input.photoId, {
+          const photo = await updateProgressPhoto(input.photoId, ctx.user.id, {
             photoName: input.photoName,
             photoDate: input.photoDate,
             description: input.description,
@@ -155,6 +186,32 @@ export const appRouter = router({
   }),
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
+    updateEmail: protectedProcedure
+      .input(
+        z.object({
+          email: z.string().email(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { updateUserEmail } = await import("./auth");
+        const userId = Number(ctx.user.id);
+        if (!Number.isFinite(userId)) {
+          throw new TRPCError({ code: "UNAUTHORIZED" });
+        }
+
+        const result = await updateUserEmail(userId, input.email);
+        if (!result.success) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: result.message,
+          });
+        }
+
+        return {
+          success: true,
+          user: result.user,
+        };
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -295,15 +352,7 @@ export const appRouter = router({
 
         if (result.readings.length > 0) {
           try {
-            const sources = await getSourcesForUser(ctx.user.id);
-            let source = sources.find(s => s.displayName === "Dexcom Clarity");
-            if (!source) {
-              source = await createCustomSource(ctx.user.id, "Dexcom Clarity", "glucose");
-            }
-
-            if (!source) {
-              throw new Error("Failed to create or find Dexcom Clarity source");
-            }
+            const sourceId = await getOrCreateGlucoseSource(ctx.user.id, "Dexcom Clarity");
 
             const dbReadings = result.readings.map(r => ({
               readingAt: r.timestamp,
@@ -311,7 +360,7 @@ export const appRouter = router({
               trend: r.trend,
             }));
 
-            await addGlucoseReadings(ctx.user.id, source.id, dbReadings);
+            await addGlucoseReadings(ctx.user.id, sourceId, dbReadings);
 
             const glucoseReadings = await getGlucoseReadingsForDateRange(
               ctx.user.id,
@@ -320,12 +369,21 @@ export const appRouter = router({
             );
             const enhancedStats = await calculateGlucoseStatistics(glucoseReadings);
 
+            const first = result.readings[0];
+            const last = result.readings[result.readings.length - 1];
+            const glucoseDelta = last.value - first.value;
+            const trendDirection = glucoseDelta > 12 ? "rising" : glucoseDelta < -12 ? "falling" : "stable";
+
             return {
               success: true,
               importedCount: result.importedCount,
               skippedCount: result.skippedCount,
               errors: result.errors,
               statistics: enhancedStats,
+              trends: {
+                direction: trendDirection,
+                changeMgdl: Math.round(glucoseDelta * 10) / 10,
+              },
             };
           } catch (error) {
             console.error("Error saving glucose readings:", error);
@@ -339,12 +397,67 @@ export const appRouter = router({
           }
         }
 
+        const first = result.readings[0];
+        const last = result.readings[result.readings.length - 1];
+        const glucoseDelta = first && last ? last.value - first.value : 0;
+        const trendDirection = glucoseDelta > 12 ? "rising" : glucoseDelta < -12 ? "falling" : "stable";
+
         return {
           success: true,
           importedCount: result.importedCount,
           skippedCount: result.skippedCount,
           errors: result.errors,
           statistics: stats,
+          trends: {
+            direction: trendDirection,
+            changeMgdl: Math.round(glucoseDelta * 10) / 10,
+          },
+        };
+      }),
+    importClarityPDF: protectedProcedure
+      .input(
+        z.object({
+          pdfBase64: z.string().min(1),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const pdfBuffer = Buffer.from(input.pdfBase64, "base64");
+        const text = await extractTextFromPDF(pdfBuffer);
+        const validation = validateClarityPDF(text);
+
+        if (!validation.valid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: validation.error || "Invalid Dexcom Clarity PDF",
+          });
+        }
+
+        const extracted = parseClarityReportText(text);
+
+        if (
+          extracted.averageGlucose === undefined &&
+          extracted.timeInRange === undefined &&
+          extracted.estimatedA1C === undefined
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Could not extract A1C, average glucose, or time in range from the PDF",
+          });
+        }
+
+        await upsertUserProfile(ctx.user.id, {
+          cgmAverageGlucose: extracted.averageGlucose,
+          cgmTimeInRange: extracted.timeInRange,
+          cgmA1cEstimate: extracted.estimatedA1C,
+        });
+
+        return {
+          success: true,
+          metrics: {
+            averageGlucose: extracted.averageGlucose ?? null,
+            timeInRange: extracted.timeInRange ?? null,
+            a1cEstimate: extracted.estimatedA1C ?? null,
+          },
         };
       }),
 
@@ -489,11 +602,12 @@ export const appRouter = router({
           healthObjectives: z.array(z.string()).optional(),
         })
       )
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
         const totalCalories = input.foodLogs.reduce((sum, log) => sum + log.calories, 0);
         const totalProtein = input.foodLogs.reduce((sum, log) => sum + log.proteinGrams, 0);
         const totalCarbs = input.foodLogs.reduce((sum, log) => sum + log.carbsGrams, 0);
         const totalFat = input.foodLogs.reduce((sum, log) => sum + log.fatGrams, 0);
+        const glucoseContext = await getCGMStats(ctx.user.id, 30);
 
         const macros: DailyMacros = {
           totalCalories,
@@ -515,7 +629,8 @@ export const appRouter = router({
             dailyFatGoal: input.dailyFatGoal,
             healthObjectives: input.healthObjectives || [],
           },
-          macros
+          macros,
+          glucoseContext
         );
       }),
     recognizeWithAI: protectedProcedure
@@ -667,16 +782,32 @@ export const appRouter = router({
     searchWithAI: publicProcedure
       .input(z.object({ query: z.string().min(1) }))
       .query(async ({ input }) => {
+        const normalizedQuery = input.query.trim();
+        if (!normalizedQuery) {
+          return [];
+        }
+
+        const mapUsdaResults = (usdaResults: Awaited<ReturnType<typeof searchUSDAFoods>>) =>
+          usdaResults.map((food) => ({
+            name: food.foodName,
+            description: `${food.dataType}${food.description ? ` - ${food.description}` : ""}`,
+            caloriesPer100g: food.calories,
+            proteinPer100g: food.proteinGrams,
+            carbsPer100g: food.carbsGrams,
+            fatPer100g: food.fatGrams,
+            servingSize: food.servingSize || "100g",
+          }));
+
         // 1. Check local file cache first (fast, always available)
-        const localCached = await getLocalCachedFood(input.query);
+        const localCached = await getLocalCachedFood(normalizedQuery);
         if (localCached && localCached.length > 0) {
-          return localCached;
+          return localCached.slice(0, 10);
         }
 
         // 2. Check DB cache if available
-        const dbCached = await getCachedFoodSearchResults(input.query);
+        const dbCached = await getCachedFoodSearchResults(normalizedQuery);
         if (dbCached.length > 0) {
-          console.log(`[Food Search] DB cache hit for query: "${input.query}" (${dbCached.length} results)`);
+          console.log(`[Food Search] DB cache hit for query: "${normalizedQuery}" (${dbCached.length} results)`);
           const mapped = dbCached.map(c => ({
             name: c.foodName,
             description: c.description || "",
@@ -684,19 +815,68 @@ export const appRouter = router({
             proteinPer100g: c.proteinGrams,
             carbsPer100g: c.carbsGrams,
             fatPer100g: c.fatGrams,
-          }));
+            servingSize: c.servingSize || "100g",
+          })).slice(0, 10);
           // Backfill local cache from DB results
-          await saveLocalCachedFood(input.query, mapped);
+          await saveLocalCachedFood(normalizedQuery, mapped);
           return mapped;
         }
 
-        // 3. Cache miss — call Gemini API
-        console.log(`[Food Search] Cache miss for query: "${input.query}" - calling Gemini API`);
-        const results = await searchFoodWithGemini(input.query);
+        // 3. Cache miss — call Gemini API first, then fallback to USDA online search.
+        console.log(`[Food Search] Cache miss for query: "${normalizedQuery}" - calling Gemini API`);
+
+        let results: Array<{
+          name: string;
+          description: string;
+          caloriesPer100g: number;
+          proteinPer100g: number;
+          carbsPer100g: number;
+          fatPer100g: number;
+          servingSize?: string;
+        }> = [];
+        let resultSource: "open_food_facts" | "gemini" | "usda" = "gemini";
+
+        try {
+          const offResults = await searchOpenFoodFactsByName(normalizedQuery, 10);
+          if (offResults.length > 0) {
+            results = offResults.map((food) => ({
+              name: food.name,
+              description: food.description,
+              caloriesPer100g: food.caloriesPer100g,
+              proteinPer100g: food.proteinPer100g,
+              carbsPer100g: food.carbsPer100g,
+              fatPer100g: food.fatPer100g,
+              servingSize: food.servingSize || "100g",
+            }));
+            resultSource = "open_food_facts";
+          }
+        } catch (error) {
+          console.warn(`[Food Search] Open Food Facts failed for query: "${normalizedQuery}"`, error);
+        }
+
+        if (results.length === 0) {
+          try {
+            results = (await searchFoodWithGemini(normalizedQuery)).slice(0, 10);
+            if (results.length > 0) {
+              resultSource = "gemini";
+            }
+          } catch (error) {
+            console.warn(`[Food Search] Gemini failed for query: "${normalizedQuery}"`, error);
+          }
+        }
+
+        if (results.length === 0) {
+          console.log(`[Food Search] Falling back to USDA for query: "${normalizedQuery}"`);
+          const usdaResults = await searchUSDAFoods(normalizedQuery);
+          results = mapUsdaResults(usdaResults).slice(0, 10);
+          if (results.length > 0) {
+            resultSource = "usda";
+          }
+        }
 
         if (results.length > 0) {
           // Save to local file cache (always works)
-          await saveLocalCachedFood(input.query, results);
+          await saveLocalCachedFood(normalizedQuery, results);
 
           // Save to DB cache if available
           const cacheData = results.map(r => ({
@@ -706,10 +886,10 @@ export const appRouter = router({
             proteinGrams: r.proteinPer100g,
             carbsGrams: r.carbsPer100g,
             fatGrams: r.fatPer100g,
-            servingSize: "100g",
-            source: "gemini" as const,
+            servingSize: r.servingSize || "100g",
+            source: resultSource,
           }));
-          await cacheFoodSearchResults(input.query, cacheData);
+          await cacheFoodSearchResults(normalizedQuery, cacheData);
         }
 
         return results;
@@ -894,6 +1074,225 @@ export const appRouter = router({
         };
       }),
   }),
+  workouts: router({
+    addEntry: protectedProcedure
+      .input(
+        z.object({
+          exerciseName: z.string().min(1),
+          exerciseType: z.string().min(1),
+          durationMinutes: z.number().int().positive(),
+          caloriesBurned: z.number().int().nonnegative().optional(),
+          intensity: z.enum(["light", "moderate", "intense"]).default("moderate"),
+          notes: z.string().optional(),
+          recordedAt: z.number().int().optional(),
+        })
+      )
+      .mutation(({ ctx, input }) => addWorkoutEntry(ctx.user.id, input)),
+    getEntries: protectedProcedure
+      .input(
+        z.object({
+          days: z.number().int().min(7).max(365).default(30),
+        })
+      )
+      .query(({ ctx, input }) => getWorkoutEntries(ctx.user.id, input.days)),
+    deleteEntry: protectedProcedure
+      .input(z.object({ entryId: z.number().int() }))
+      .mutation(({ ctx, input }) => deleteWorkoutEntry(input.entryId, ctx.user.id)),
+    estimateFromText: protectedProcedure
+      .input(
+        z.object({
+          transcript: z.string().min(3),
+          fallbackWeightLbs: z.number().int().positive().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const profile = await getUserProfile(ctx.user.id);
+        const userWeight = profile?.weightLbs || input.fallbackWeightLbs || 170;
+
+        try {
+          const { invokeLLM } = await import("./_core/llm");
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "Extract workout details from text and estimate calories burned. Return strict JSON only.",
+              },
+              {
+                role: "user",
+                content: `User text: "${input.transcript}". User weight: ${userWeight} lbs.`,
+              },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "workout_estimate",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    exerciseName: { type: "string" },
+                    exerciseType: { type: "string" },
+                    durationMinutes: { type: "number" },
+                    intensity: { type: "string", enum: ["light", "moderate", "intense"] },
+                    caloriesBurned: { type: "number" },
+                    reasoning: { type: "string" },
+                  },
+                  required: ["exerciseName", "exerciseType", "durationMinutes", "intensity", "caloriesBurned", "reasoning"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+
+          const content = response.choices[0]?.message?.content;
+          const contentStr = typeof content === "string" ? content : "";
+          const parsed = JSON.parse(contentStr) as {
+            exerciseName: string;
+            exerciseType: string;
+            durationMinutes: number;
+            intensity: "light" | "moderate" | "intense";
+            caloriesBurned: number;
+            reasoning: string;
+          };
+
+          return {
+            exerciseName: parsed.exerciseName,
+            exerciseType: parsed.exerciseType,
+            durationMinutes: Math.max(1, Math.round(parsed.durationMinutes)),
+            intensity: parsed.intensity,
+            caloriesBurned: Math.max(1, Math.round(parsed.caloriesBurned)),
+            reasoning: parsed.reasoning,
+            usedFallback: false,
+          };
+        } catch (error) {
+          const durationMatch = input.transcript.match(/(\d{1,3})\s*(min|mins|minute|minutes)/i);
+          const durationMinutes = durationMatch ? Math.max(1, Number(durationMatch[1])) : 30;
+
+          const normalized = input.transcript.toLowerCase();
+          let exerciseType = "Cardio";
+          if (/strength|lift|weights|resistance/.test(normalized)) exerciseType = "Strength";
+          if (/yoga|pilates|stretch/.test(normalized)) exerciseType = "Flexibility";
+          if (/basketball|tennis|soccer|sport/.test(normalized)) exerciseType = "Sports";
+
+          const intensity: "light" | "moderate" | "intense" = /hard|intense|sprint|hiit/.test(normalized)
+            ? "intense"
+            : /easy|light|walk/.test(normalized)
+              ? "light"
+              : "moderate";
+
+          const caloriesBurned = estimateCaloriesWithMet(exerciseType, durationMinutes, userWeight, intensity);
+
+          return {
+            exerciseName: input.transcript,
+            exerciseType,
+            durationMinutes,
+            intensity,
+            caloriesBurned,
+            reasoning: "Estimated using MET fallback from workout type, duration, and your weight.",
+            usedFallback: true,
+          };
+        }
+      }),
+    getDailyRecommendations: protectedProcedure
+      .query(async ({ ctx }) => {
+        const [profile, recentWorkouts] = await Promise.all([
+          getUserProfile(ctx.user.id),
+          getWorkoutEntries(ctx.user.id, 14),
+        ]);
+
+        const fitnessGoal = profile?.fitnessGoal || "maintain";
+        const weeklyMinutes = recentWorkouts.reduce((sum, w) => {
+          const withinWeek = w.recordedAt >= (Date.now() - 7 * 24 * 60 * 60 * 1000);
+          return withinWeek ? sum + w.durationMinutes : sum;
+        }, 0);
+
+        try {
+          const { invokeLLM } = await import("./_core/llm");
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "You are a fitness coach. Recommend safe, practical workouts for today. Return strict JSON only.",
+              },
+              {
+                role: "user",
+                content: `Fitness goal: ${fitnessGoal}. Recent weekly workout minutes: ${weeklyMinutes}. Provide exactly 3 workouts for today with rationale.`,
+              },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "daily_workout_recommendations",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    recommendations: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          title: { type: "string" },
+                          durationMinutes: { type: "number" },
+                          intensity: { type: "string", enum: ["light", "moderate", "intense"] },
+                          reason: { type: "string" },
+                        },
+                        required: ["title", "durationMinutes", "intensity", "reason"],
+                        additionalProperties: false,
+                      },
+                      minItems: 3,
+                      maxItems: 3,
+                    },
+                  },
+                  required: ["recommendations"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+
+          const content = response.choices[0]?.message?.content;
+          const contentStr = typeof content === "string" ? content : "";
+          const parsed = JSON.parse(contentStr) as {
+            recommendations: Array<{
+              title: string;
+              durationMinutes: number;
+              intensity: "light" | "moderate" | "intense";
+              reason: string;
+            }>;
+          };
+
+          return parsed.recommendations.map((r) => ({
+            title: r.title,
+            durationMinutes: Math.max(5, Math.round(r.durationMinutes)),
+            intensity: r.intensity,
+            reason: r.reason,
+          }));
+        } catch {
+          if (fitnessGoal === "lose_fat") {
+            return [
+              { title: "Brisk Walk + Intervals", durationMinutes: 35, intensity: "moderate", reason: "Supports calorie deficit with low joint stress." },
+              { title: "Full-Body Strength", durationMinutes: 30, intensity: "moderate", reason: "Preserves lean mass while cutting fat." },
+              { title: "Mobility and Core", durationMinutes: 20, intensity: "light", reason: "Improves recovery and consistency." },
+            ];
+          }
+
+          if (fitnessGoal === "build_muscle") {
+            return [
+              { title: "Upper Body Strength", durationMinutes: 45, intensity: "intense", reason: "Progressive overload for hypertrophy." },
+              { title: "Lower Body Strength", durationMinutes: 45, intensity: "intense", reason: "Builds foundational strength and muscle." },
+              { title: "Easy Cardio Recovery", durationMinutes: 20, intensity: "light", reason: "Supports conditioning without hurting lifting quality." },
+            ];
+          }
+
+          return [
+            { title: "Steady Cardio", durationMinutes: 30, intensity: "moderate", reason: "Improves cardiovascular fitness and consistency." },
+            { title: "Functional Strength", durationMinutes: 30, intensity: "moderate", reason: "Maintains muscle and metabolic health." },
+            { title: "Stretch + Mobility", durationMinutes: 15, intensity: "light", reason: "Helps recovery and reduces stiffness." },
+          ];
+        }
+      }),
+  }),
   bodyMeasurements: router({
     addEntry: protectedProcedure
       .input(
@@ -1021,6 +1420,25 @@ Return a JSON object with an "insights" array of exactly 3 items. Each item has:
           return null;
         }
       }),
+  }),
+  manualGlucose: router({
+    addEntry: protectedProcedure
+      .input(
+        z.object({
+          mgdl: z.number().positive().max(1000),
+          readingAt: z.number().int().positive(),
+          notes: z.string().max(500).optional(),
+        })
+      )
+      .mutation(({ ctx, input }) =>
+        addManualGlucoseEntry(ctx.user.id, input.mgdl, input.readingAt, input.notes)
+      ),
+    getTodayEntries: protectedProcedure
+      .input(z.object({ dayStart: z.number().int() }))
+      .query(({ ctx, input }) => getTodayManualGlucoseEntries(ctx.user.id, input.dayStart)),
+    deleteEntry: protectedProcedure
+      .input(z.object({ entryId: z.number().int() }))
+      .mutation(({ ctx, input }) => deleteManualGlucoseEntry(input.entryId, ctx.user.id)),
   }),
 });
 

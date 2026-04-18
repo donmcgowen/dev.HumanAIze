@@ -12,7 +12,7 @@ import {
   syncJobs,
   weeklySummaries,
 } from "../drizzle/schema";
-import { getDb } from "./db";
+import { getDb, getUserProfile } from "./db";
 import { invokeLLM } from "./_core/llm";
 
 const DAY_MS = 86_400_000;
@@ -223,6 +223,7 @@ async function getMetricWindow(userId: number, rangeDays: number) {
 
 export async function getDashboardBundle(userId: number, rangeDays: number) {
   const metrics = await getMetricWindow(userId, rangeDays);
+  const profile = await getUserProfile(userId);
   const dailyMap = new Map<number, {
     date: number;
     glucoseValues: number[];
@@ -299,9 +300,51 @@ export async function getDashboardBundle(userId: number, rangeDays: number) {
   const stepsAverage = Math.round(average(metrics.activity.map((item) => item.steps)));
   const caloriesAverage = Math.round(average(metrics.nutrition.map((item) => item.calories)));
 
+  const toPositiveNumberOrNull = (value: unknown): number | null => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+    return null;
+  };
+
+  const profileTargets = {
+    calories: toPositiveNumberOrNull(profile?.dailyCalorieTarget),
+    protein: toPositiveNumberOrNull(profile?.dailyProteinTarget),
+    carbs: toPositiveNumberOrNull(profile?.dailyCarbsTarget),
+    fat: toPositiveNumberOrNull(profile?.dailyFatTarget),
+  };
+
+  const resolvedTargets = {
+    calories: profileTargets.calories ?? 2000,
+    protein: profileTargets.protein ?? 150,
+    carbs: profileTargets.carbs ?? 200,
+    fat: profileTargets.fat ?? 65,
+  };
+
+  const hasAnyProfileTarget =
+    profileTargets.calories !== null ||
+    profileTargets.protein !== null ||
+    profileTargets.carbs !== null ||
+    profileTargets.fat !== null;
+
+  const missingProfileTargets: Array<"calories" | "protein" | "carbs" | "fat"> = [];
+  if (profileTargets.calories === null) missingProfileTargets.push("calories");
+  if (profileTargets.protein === null) missingProfileTargets.push("protein");
+  if (profileTargets.carbs === null) missingProfileTargets.push("carbs");
+  if (profileTargets.fat === null) missingProfileTargets.push("fat");
+
   return {
     sources: metrics.sources,
     chart,
+    dailyTargets: {
+      ...resolvedTargets,
+      hasAnyProfileTarget,
+      missingProfileTargets,
+    },
     summary: {
       glucoseAverage,
       timeInRangeEstimate: Math.round((metrics.glucose.filter((item) => Number(item.mgdl) >= 80 && Number(item.mgdl) <= 160).length / Math.max(metrics.glucose.length, 1)) * 100),

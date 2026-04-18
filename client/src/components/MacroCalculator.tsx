@@ -7,8 +7,8 @@ import { calculateMacros, getActivityLevelLabel, type ActivityLevel, type Fitnes
 import { Zap } from "lucide-react";
 
 interface MacroCalculatorProps {
-  heightCm: number;
-  weightKg: number;
+  heightIn: number;
+  weightLbs: number;
   ageYears: number;
   fitnessGoal: FitnessGoal;
   activityLevel?: ActivityLevel;
@@ -17,8 +17,8 @@ interface MacroCalculatorProps {
 }
 
 export function MacroCalculator({
-  heightCm,
-  weightKg,
+  heightIn,
+  weightLbs,
   ageYears,
   fitnessGoal,
   activityLevel = "moderately_active",
@@ -29,8 +29,8 @@ export function MacroCalculator({
 
   // Calculate macros based on current inputs
   const suggestion = calculateMacros({
-    heightCm,
-    weightKg,
+    heightIn,
+    weightLbs,
     ageYears,
     fitnessGoal,
     activityLevel: selectedActivityLevel,

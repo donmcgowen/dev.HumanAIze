@@ -209,14 +209,20 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+const resolveApiUrl = () => {
+  if (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0) {
+    const base = ENV.forgeApiUrl.replace(/\/$/, "");
+    // Azure OpenAI uses a different path pattern; detect by presence of
+    // "openai.azure.com" and trust the URL as-is (includes deployment + version).
+    if (base.includes("openai.azure.com")) return base;
+    return `${base}/v1/chat/completions`;
+  }
+  return "https://api.openai.com/v1/chat/completions";
+};
 
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("BUILT_IN_FORGE_API_KEY (LLM API key) is not configured");
   }
 };
 
@@ -280,7 +286,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: ENV.llmModel,
     messages: messages.map(normalizeMessage),
   };
 

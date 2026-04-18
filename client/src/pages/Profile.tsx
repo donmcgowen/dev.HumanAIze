@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { calculateMacros, getActivityLevelLabel, type ActivityLevel, type MacroSuggestion } from "../../../shared/macroCalculator";
 
 export function Profile() {
+  const utils = trpc.useUtils();
   const { data: profile, isLoading: isLoadingProfile, refetch } = trpc.profile.get.useQuery();
   const updateProfile = trpc.profile.upsert.useMutation();
 
@@ -43,6 +44,40 @@ export function Profile() {
   const [dailyCarbsTarget, setDailyCarbsTarget] = useState<string>("");
   const [dailyFatTarget, setDailyFatTarget] = useState<string>("");
 
+  const parsePositiveIntOrUndefined = (value: string): number | undefined => {
+    if (!value) return undefined;
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  };
+
+  const toDateInputValue = (value: unknown): string => {
+    if (value === null || value === undefined || value === "") {
+      return "";
+    }
+
+    let normalizedValue: string | number | Date = value as string | number | Date;
+    if (typeof value === "bigint") {
+      normalizedValue = Number(value);
+    } else if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+      normalizedValue = Number(value);
+    }
+
+    const date = new Date(normalizedValue);
+    if (!Number.isFinite(date.getTime())) {
+      return "";
+    }
+
+    return date.toISOString().split("T")[0];
+  };
+
+  const toUtcMidnightTimestampOrUndefined = (value: string): number | undefined => {
+    if (!value) return undefined;
+    const [year, month, day] = value.split("-").map((x) => parseInt(x, 10));
+    if (!year || !month || !day) return undefined;
+    const ts = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+    return Number.isFinite(ts) ? ts : undefined;
+  };
+
   // Load profile data into form
   useEffect(() => {
     if (profile) {
@@ -51,18 +86,15 @@ export function Profile() {
         weightLbs: profile.weightLbs ? profile.weightLbs.toString() : "0",
         ageYears: profile.ageYears ? profile.ageYears.toString() : "0",
         goalWeightLbs: profile.goalWeightLbs ? profile.goalWeightLbs.toString() : "0",
-        goalDate: profile.goalDate ? new Date(profile.goalDate).toISOString().split('T')[0] : "",
+        goalDate: toDateInputValue(profile.goalDate),
         fitnessGoal: profile.fitnessGoal || "",
       });
-      setDailyCalorieTarget(profile.dailyCalorieTarget ? profile.dailyCalorieTarget.toString() : "0");
-      setDailyProteinTarget(profile.dailyProteinTarget ? profile.dailyProteinTarget.toString() : "0");
-      setDailyCarbsTarget(profile.dailyCarbsTarget ? profile.dailyCarbsTarget.toString() : "0");
-      setDailyFatTarget(profile.dailyFatTarget ? profile.dailyFatTarget.toString() : "0");
+      setDailyCalorieTarget(profile.dailyCalorieTarget ? profile.dailyCalorieTarget.toString() : "");
+      setDailyProteinTarget(profile.dailyProteinTarget ? profile.dailyProteinTarget.toString() : "");
+      setDailyCarbsTarget(profile.dailyCarbsTarget ? profile.dailyCarbsTarget.toString() : "");
+      setDailyFatTarget(profile.dailyFatTarget ? profile.dailyFatTarget.toString() : "");
       setGoalWeightLbs(profile.goalWeightLbs ? profile.goalWeightLbs.toString() : "");
-      if (profile.goalDate) {
-        const date = new Date(profile.goalDate);
-        setGoalDate(date.toISOString().split('T')[0]);
-      }
+      setGoalDate(toDateInputValue(profile.goalDate));
     }
   }, [profile]);
 
@@ -95,13 +127,9 @@ export function Profile() {
 
     if (heightInput > 0 && weightInput > 0 && ageInput > 0) {
       try {
-        // Convert imperial to metric for calculation
-        const heightCm = heightInput * 2.54;
-        const weightKg = weightInput / 2.20462;
-        
         const maintenance = calculateMacros({
-          heightCm,
-          weightKg,
+          heightIn: heightInput,
+          weightLbs: weightInput,
           ageYears: ageInput,
           activityLevel,
           fitnessGoal: 'maintain',
@@ -118,30 +146,25 @@ export function Profile() {
     const heightInput = parseFloat(formData.heightIn);
     const weightInput = parseFloat(formData.weightLbs);
     const ageInput = parseInt(formData.ageYears);
-        const goalWeight = parseFloat(formData.goalWeightLbs);
+    const goalWeight = parseFloat(goalWeightLbs);
 
     if (heightInput > 0 && weightInput > 0 && ageInput > 0 && goalWeight > 0 && formData.fitnessGoal) {
       try {
-        // Convert imperial to metric for calculation
-        const heightCm = heightInput * 2.54;
-        const weightKg = weightInput / 2.20462;
-        const goalWeightKg = goalWeight / 2.20462;
-        
         const targets = calculateMacros({
-          heightCm,
-          weightKg,
+          heightIn: heightInput,
+          weightLbs: weightInput,
           ageYears: ageInput,
           activityLevel,
           fitnessGoal: formData.fitnessGoal as 'lose_fat' | 'build_muscle' | 'maintain',
-          goalWeightKg: formData.fitnessGoal === 'lose_fat' ? goalWeightKg : undefined,
-          targetDateMs: formData.fitnessGoal === 'lose_fat' && formData.goalDate ? new Date(formData.goalDate + 'T00:00:00').getTime() : undefined,
+          goalWeightLbs: formData.fitnessGoal === 'lose_fat' ? goalWeight : undefined,
+          targetDateMs: formData.fitnessGoal === 'lose_fat' && goalDate ? toUtcMidnightTimestampOrUndefined(goalDate) : undefined,
         });
         setGoalTargets(targets);
       } catch (error) {
         console.error("Error calculating goal targets:", error);
       }
     }
-  }, [formData.heightIn, formData.weightLbs, formData.ageYears, formData.goalWeightLbs, formData.goalDate, formData.fitnessGoal, activityLevel]);
+  }, [formData.heightIn, formData.weightLbs, formData.ageYears, goalWeightLbs, goalDate, formData.fitnessGoal, activityLevel]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -167,7 +190,15 @@ export function Profile() {
 
     try {
       const goalWeightVal = goalWeightLbs ? parseInt(goalWeightLbs) : undefined;
-      const goalDateVal = goalDate ? new Date(goalDate).getTime() : undefined;
+      const goalDateVal = toUtcMidnightTimestampOrUndefined(goalDate);
+      const effectiveDailyCalorieTarget =
+        goalTargets?.dailyCalories ?? parsePositiveIntOrUndefined(dailyCalorieTarget);
+      const effectiveDailyProteinTarget =
+        goalTargets?.dailyProtein ?? parsePositiveIntOrUndefined(dailyProteinTarget);
+      const effectiveDailyCarbsTarget =
+        goalTargets?.dailyCarbs ?? parsePositiveIntOrUndefined(dailyCarbsTarget);
+      const effectiveDailyFatTarget =
+        goalTargets?.dailyFat ?? parsePositiveIntOrUndefined(dailyFatTarget);
 
       await updateProfile.mutateAsync({
         heightIn: heightInput,
@@ -176,13 +207,19 @@ export function Profile() {
         fitnessGoal: (formData.fitnessGoal || undefined) as 'lose_fat' | 'build_muscle' | 'maintain' | undefined,
         goalWeightLbs: goalWeightVal,
         goalDate: goalDateVal,
-        dailyCalorieTarget: dailyCalorieTarget ? parseInt(dailyCalorieTarget) : undefined,
-        dailyProteinTarget: dailyProteinTarget ? parseInt(dailyProteinTarget) : undefined,
-        dailyCarbsTarget: dailyCarbsTarget ? parseInt(dailyCarbsTarget) : undefined,
-        dailyFatTarget: dailyFatTarget ? parseInt(dailyFatTarget) : undefined,
+        dailyCalorieTarget: effectiveDailyCalorieTarget,
+        dailyProteinTarget: effectiveDailyProteinTarget,
+        dailyCarbsTarget: effectiveDailyCarbsTarget,
+        dailyFatTarget: effectiveDailyFatTarget,
       });
 
+      await utils.profile.get.invalidate();
+
       toast.success("Profile saved successfully!");
+      setDailyCalorieTarget(effectiveDailyCalorieTarget ? String(effectiveDailyCalorieTarget) : "");
+      setDailyProteinTarget(effectiveDailyProteinTarget ? String(effectiveDailyProteinTarget) : "");
+      setDailyCarbsTarget(effectiveDailyCarbsTarget ? String(effectiveDailyCarbsTarget) : "");
+      setDailyFatTarget(effectiveDailyFatTarget ? String(effectiveDailyFatTarget) : "");
       refetch();
     } catch (error) {
       console.error("Error saving profile:", error);
@@ -368,7 +405,11 @@ export function Profile() {
                     min="0"
                     placeholder="150"
                     value={goalWeightLbs}
-                    onChange={(e) => setGoalWeightLbs(e.target.value.replace(/[^\d]/g, ''))}
+                    onChange={(e) => {
+                      const sanitized = e.target.value.replace(/[^\d]/g, '');
+                      setGoalWeightLbs(sanitized);
+                      setFormData((prev) => ({ ...prev, goalWeightLbs: sanitized }));
+                    }}
                     className="bg-slate-900 border-white/10 text-white placeholder-slate-500 mt-2"
                   />
                 </div>
@@ -378,7 +419,10 @@ export function Profile() {
                     id="goalDate"
                     type="date"
                     value={goalDate}
-                    onChange={(e) => setGoalDate(e.target.value)}
+                    onChange={(e) => {
+                      setGoalDate(e.target.value);
+                      setFormData((prev) => ({ ...prev, goalDate: e.target.value }));
+                    }}
                     className="bg-slate-900 border-white/10 text-white mt-2"
                   />
                 </div>
@@ -405,6 +449,19 @@ export function Profile() {
                       <p className="text-xl font-bold text-orange-400">{goalTargets.dailyFat}g</p>
                     </div>
                   </div>
+                  <p className="text-xs text-slate-400 mt-3">
+                    These targets are saved to your profile and used in Food Logging when you save profile.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-4 border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/10"
+                    onClick={() => {
+                      window.location.href = "/food-logging#daily-targets";
+                    }}
+                  >
+                    View Current vs Target in Food Logging
+                  </Button>
                 </div>
               )}
             </>

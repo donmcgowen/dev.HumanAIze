@@ -11,6 +11,7 @@ interface CachedFoodEntry {
   proteinPer100g: number;
   carbsPer100g: number;
   fatPer100g: number;
+  servingSize?: string;
 }
 
 interface CacheRecord {
