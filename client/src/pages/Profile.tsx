@@ -144,7 +144,7 @@ export function Profile() {
     }
   }, [formData.heightIn, formData.weightLbs, formData.ageYears, activityLevel]);
 
-  // Calculate goal-based targets
+  // Calculate goal-based targets and auto-sync into dailyTarget fields
   useEffect(() => {
     const heightInput = parseFloat(formData.heightIn);
     const weightInput = parseFloat(formData.weightLbs);
@@ -163,6 +163,11 @@ export function Profile() {
           targetDateMs: formData.fitnessGoal === 'lose_fat' && goalDate ? toUtcMidnightTimestampOrUndefined(goalDate) : undefined,
         });
         setGoalTargets(targets);
+        // Auto-populate the daily target fields so they are always saved to the DB
+        setDailyCalorieTarget(String(targets.dailyCalories));
+        setDailyProteinTarget(String(targets.dailyProtein));
+        setDailyCarbsTarget(String(targets.dailyCarbs));
+        setDailyFatTarget(String(targets.dailyFat));
       } catch (error) {
         console.error("Error calculating goal targets:", error);
       }
@@ -194,14 +199,12 @@ export function Profile() {
     try {
       const goalWeightVal = goalWeightLbs ? parseInt(goalWeightLbs) : undefined;
       const goalDateVal = toUtcMidnightTimestampOrUndefined(goalDate);
-      const effectiveDailyCalorieTarget =
-        goalTargets?.dailyCalories ?? parsePositiveIntOrUndefined(dailyCalorieTarget);
-      const effectiveDailyProteinTarget =
-        goalTargets?.dailyProtein ?? parsePositiveIntOrUndefined(dailyProteinTarget);
-      const effectiveDailyCarbsTarget =
-        goalTargets?.dailyCarbs ?? parsePositiveIntOrUndefined(dailyCarbsTarget);
-      const effectiveDailyFatTarget =
-        goalTargets?.dailyFat ?? parsePositiveIntOrUndefined(dailyFatTarget);
+      // dailyTarget state fields are always kept in sync with goalTargets via useEffect above,
+      // so we can always read directly from them — no need for the goalTargets ?? fallback.
+      const effectiveDailyCalorieTarget = parsePositiveIntOrUndefined(dailyCalorieTarget);
+      const effectiveDailyProteinTarget = parsePositiveIntOrUndefined(dailyProteinTarget);
+      const effectiveDailyCarbsTarget = parsePositiveIntOrUndefined(dailyCarbsTarget);
+      const effectiveDailyFatTarget = parsePositiveIntOrUndefined(dailyFatTarget);
 
       await updateProfile.mutateAsync({
         heightIn: heightInput,
@@ -221,10 +224,6 @@ export function Profile() {
       await utils.profile.get.invalidate();
 
       toast.success("Profile saved successfully!");
-      setDailyCalorieTarget(effectiveDailyCalorieTarget ? String(effectiveDailyCalorieTarget) : "");
-      setDailyProteinTarget(effectiveDailyProteinTarget ? String(effectiveDailyProteinTarget) : "");
-      setDailyCarbsTarget(effectiveDailyCarbsTarget ? String(effectiveDailyCarbsTarget) : "");
-      setDailyFatTarget(effectiveDailyFatTarget ? String(effectiveDailyFatTarget) : "");
       refetch();
     } catch (error) {
       console.error("Error saving profile:", error);
