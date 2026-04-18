@@ -987,10 +987,10 @@ export async function getMacroTrends(userId: number, startDate: number, endDate:
 
   // Get user profile for targets
   const profile = await getUserProfile(userId);
-  const calorieTarget = profile?.dailyCalorieTarget || 2000;
-  const proteinTarget = profile?.dailyProteinTarget || 150;
-  const carbsTarget = profile?.dailyCarbsTarget || 200;
-  const fatTarget = profile?.dailyFatTarget || 65;
+  const calorieTarget = profile?.dailyCalorieTarget || 0;
+  const proteinTarget = profile?.dailyProteinTarget || 0;
+  const carbsTarget = profile?.dailyCarbsTarget || 0;
+  const fatTarget = profile?.dailyFatTarget || 0;
 
   // Get all food logs in date range
   const logs = await db

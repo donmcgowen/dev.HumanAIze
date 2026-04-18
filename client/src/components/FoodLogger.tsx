@@ -118,10 +118,10 @@ export function FoodLogger() {
   };
 
   const targetTotals = {
-    calories: profileMacroTargets.calories ?? 2000,
-    protein: profileMacroTargets.protein ?? 150,
-    carbs: profileMacroTargets.carbs ?? 200,
-    fat: profileMacroTargets.fat ?? 65,
+    calories: profileMacroTargets.calories ?? 0,
+    protein: profileMacroTargets.protein ?? 0,
+    carbs: profileMacroTargets.carbs ?? 0,
+    fat: profileMacroTargets.fat ?? 0,
   };
 
   const hasAnyProfileTarget =
@@ -881,7 +881,7 @@ export function FoodLogger() {
 
             {!hasAnyProfileTarget && (
               <p className="text-xs text-slate-500 mb-3">
-                Using default targets (2000/150/200/65). Update your profile to sync personalized values.
+                No targets set. Save your profile to personalize your daily macro targets.
               </p>
             )}
 

@@ -319,10 +319,10 @@ export async function getDashboardBundle(userId: number, rangeDays: number) {
   };
 
   const resolvedTargets = {
-    calories: profileTargets.calories ?? 2000,
-    protein: profileTargets.protein ?? 150,
-    carbs: profileTargets.carbs ?? 200,
-    fat: profileTargets.fat ?? 65,
+    calories: profileTargets.calories ?? 0,
+    protein: profileTargets.protein ?? 0,
+    carbs: profileTargets.carbs ?? 0,
+    fat: profileTargets.fat ?? 0,
   };
 
   const hasAnyProfileTarget =

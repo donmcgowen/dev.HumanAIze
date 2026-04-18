@@ -83,10 +83,10 @@ export default function Dashboard() {
     fat: toPositiveNumberOrNull(userProfile?.dailyFatTarget),
   };
   const macroTargets = {
-    calories: profileMacroTargets.calories ?? 2000,
-    protein: profileMacroTargets.protein ?? 150,
-    carbs: profileMacroTargets.carbs ?? 200,
-    fat: profileMacroTargets.fat ?? 65,
+    calories: profileMacroTargets.calories ?? 0,
+    protein: profileMacroTargets.protein ?? 0,
+    carbs: profileMacroTargets.carbs ?? 0,
+    fat: profileMacroTargets.fat ?? 0,
   };
   const hasAnyProfileMacroTarget =
     profileMacroTargets.calories !== null ||
@@ -190,7 +190,7 @@ export default function Dashboard() {
           </div>
         </div>
         {!hasAnyProfileMacroTarget && (
-          <p className="text-xs text-slate-500">Using default targets (2000/150/200/65). Update your profile to personalize.</p>
+          <p className="text-xs text-slate-500">No targets set. Save your profile to personalize your daily macro targets.</p>
         )}
         {hasAnyProfileMacroTarget && missingMacroTargets.length > 0 && (
           <p className="text-xs text-slate-500">
