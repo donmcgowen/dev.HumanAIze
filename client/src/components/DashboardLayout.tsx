@@ -1,13 +1,6 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -35,6 +28,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  Settings,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -116,7 +110,9 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
   const [emailDraft, setEmailDraft] = useState(user?.email ?? "");
   const [location, setLocation] = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isProfileBladeOpen, setIsProfileBladeOpen] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const profileBladeRef = useRef<HTMLDivElement>(null);
 
   const normalizedCurrentEmail = (user?.email ?? "").trim().toLowerCase();
   const normalizedDraftEmail = emailDraft.trim().toLowerCase();
@@ -143,6 +139,19 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isMenuOpen]);
 
+  // Close profile blade when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (profileBladeRef.current && !profileBladeRef.current.contains(e.target as Node)) {
+        setIsProfileBladeOpen(false);
+      }
+    }
+    if (isProfileBladeOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isProfileBladeOpen]);
+
   // Close drawer on route change
   useEffect(() => {
     setIsMenuOpen(false);
@@ -165,6 +174,8 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
   };
 
   const currentPage = menuItems.find((item) => item.path === location);
+
+  const userInitial = user?.name?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase() ?? "U";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -191,58 +202,20 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
           <span className="text-sm font-black uppercase tracking-[0.18em] text-white">HumanAIze</span>
         </button>
 
-        {/* Right: User avatar */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 rounded-none border border-white/15 bg-white/[0.04] p-1.5 transition hover:bg-white/[0.09] focus:outline-none" aria-label="User menu">
-              <Avatar className="h-8 w-8 rounded-none border border-white/20">
-                <AvatarFallback className="rounded-none bg-cyan-500/20 text-sm font-bold text-cyan-200">
-                  {user?.name?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase() ?? "U"}
-                </AvatarFallback>
-              </Avatar>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 rounded-none border-white/10 bg-slate-950 text-white">
-            <div className="px-3 py-2 border-b border-white/10">
-              <p className="text-sm font-semibold text-white truncate">{user?.name ?? "User"}</p>
-              <p className="text-xs text-slate-400 truncate">{user?.email ?? ""}</p>
-            </div>
-            <DropdownMenuItem className="cursor-pointer rounded-none mt-1" onClick={() => setLocation("/profile")}>
-              <User className="mr-2 h-4 w-4" />
-              Update profile
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="cursor-pointer rounded-none"
-              onClick={() => {
-                setEmailDraft(user?.email ?? "");
-                setIsEmailDialogOpen(true);
-              }}
-            >
-              <Mail className="mr-2 h-4 w-4" />
-              Update email address
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-white/10" />
-            <DropdownMenuItem
-              className="cursor-pointer rounded-none text-red-300 focus:bg-red-500/10 focus:text-red-200"
-              onClick={logout}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* Right: empty spacer to keep centre title truly centred */}
+        <div className="w-[72px]" />
       </header>
 
       {/* ── Menu Blade Drawer (overlay) ── */}
       {/* Backdrop */}
-      {isMenuOpen && (
+      {(isMenuOpen || isProfileBladeOpen) && (
         <div
           className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-          onClick={() => setIsMenuOpen(false)}
+          onClick={() => { setIsMenuOpen(false); setIsProfileBladeOpen(false); }}
         />
       )}
 
-      {/* Drawer panel */}
+      {/* Nav Drawer panel */}
       <div
         ref={drawerRef}
         className={`fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-white/10 bg-slate-950/98 shadow-2xl transition-transform duration-300 ease-in-out ${
@@ -291,20 +264,106 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Drawer footer */}
-        <div className="border-t border-white/10 p-4">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9 rounded-none border border-white/20">
+        {/* Drawer footer — profile button at bottom-left */}
+        <div className="border-t border-white/10 p-3">
+          <button
+            onClick={() => {
+              setIsMenuOpen(false);
+              setIsProfileBladeOpen(true);
+            }}
+            className="flex w-full items-center gap-3 rounded-none border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left transition-colors hover:bg-white/[0.08] hover:border-white/20 focus:outline-none group"
+            aria-label="Open profile settings"
+          >
+            <Avatar className="h-9 w-9 rounded-none border border-white/20 flex-shrink-0">
               <AvatarFallback className="rounded-none bg-cyan-500/20 text-sm font-bold text-cyan-200">
-                {user?.name?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase() ?? "U"}
+                {userInitial}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">{user?.name ?? "User"}</p>
               <p className="truncate text-xs text-slate-400">{user?.email ?? ""}</p>
             </div>
-          </div>
+            <Settings className="h-4 w-4 flex-shrink-0 text-slate-500 group-hover:text-slate-300 transition-colors" />
+          </button>
         </div>
+      </div>
+
+      {/* ── Profile Settings Blade (slides in from left, on top of nav drawer) ── */}
+      <div
+        ref={profileBladeRef}
+        className={`fixed left-0 top-0 z-50 flex h-full w-80 flex-col border-r border-white/10 bg-slate-950 shadow-2xl transition-transform duration-300 ease-in-out ${
+          isProfileBladeOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Blade header */}
+        <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-9 w-9 rounded-none border border-white/20">
+              <AvatarFallback className="rounded-none bg-cyan-500/20 text-sm font-bold text-cyan-200">
+                {userInitial}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">{user?.name ?? "User"}</p>
+              <p className="truncate text-xs text-slate-400">{user?.email ?? ""}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsProfileBladeOpen(false)}
+            className="rounded-none border border-white/10 bg-white/[0.04] p-1.5 text-slate-400 transition hover:bg-white/[0.09] hover:text-white focus:outline-none"
+            aria-label="Close profile"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Blade actions */}
+        <nav className="flex-1 overflow-y-auto py-3">
+          <button
+            onClick={() => {
+              setIsProfileBladeOpen(false);
+              setLocation("/profile");
+            }}
+            className="flex w-full items-center gap-3 border-l-2 border-transparent px-4 py-3.5 text-left text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
+          >
+            <User className="h-5 w-5 flex-shrink-0 text-slate-400" />
+            <div>
+              <p className="text-sm font-medium tracking-[0.04em]">Edit Profile</p>
+              <p className="text-xs text-slate-500">Height, weight, goals & macro targets</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => {
+              setIsProfileBladeOpen(false);
+              setEmailDraft(user?.email ?? "");
+              setIsEmailDialogOpen(true);
+            }}
+            className="flex w-full items-center gap-3 border-l-2 border-transparent px-4 py-3.5 text-left text-slate-300 transition-colors hover:bg-white/[0.05] hover:text-white"
+          >
+            <Mail className="h-5 w-5 flex-shrink-0 text-slate-400" />
+            <div>
+              <p className="text-sm font-medium tracking-[0.04em]">Update Email</p>
+              <p className="text-xs text-slate-500">Change your account email address</p>
+            </div>
+          </button>
+
+          <div className="my-2 mx-4 border-t border-white/10" />
+
+          <button
+            onClick={() => {
+              setIsProfileBladeOpen(false);
+              logout();
+            }}
+            className="flex w-full items-center gap-3 border-l-2 border-transparent px-4 py-3.5 text-left text-red-300 transition-colors hover:bg-red-500/10 hover:text-red-200"
+          >
+            <LogOut className="h-5 w-5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium tracking-[0.04em]">Sign Out</p>
+              <p className="text-xs text-red-400/70">End your current session</p>
+            </div>
+          </button>
+        </nav>
       </div>
 
       {/* ── Email update dialog ── */}
