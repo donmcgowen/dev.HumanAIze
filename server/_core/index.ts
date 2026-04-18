@@ -1,4 +1,23 @@
 import "dotenv/config";
+// Polyfill browser globals required by pdfjs-dist when running in Node.js
+// pdfjs-dist v5 references DOMMatrix, ImageData, and Path2D at module load time
+if (typeof globalThis.DOMMatrix === "undefined") {
+  // @ts-ignore
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor() { return new Proxy(this, { get: (t, p) => typeof p === 'string' && !isNaN(+p) ? 0 : (t as any)[p] ?? 0 }); }
+  };
+}
+if (typeof globalThis.ImageData === "undefined") {
+  // @ts-ignore
+  globalThis.ImageData = class ImageData {
+    constructor(public width: number = 0, public height: number = 0) {}
+  };
+}
+if (typeof globalThis.Path2D === "undefined") {
+  // @ts-ignore
+  globalThis.Path2D = class Path2D {};
+}
+
 import express from "express";
 import compression from "compression";
 import { createServer } from "http";
