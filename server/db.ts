@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, lt, desc, sql } from "drizzle-orm";
+﻿import { and, eq, gte, lte, lt, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, userProfiles, InsertUserProfile, UserProfile, foodLogs, InsertFoodLog, FoodLog, healthSources, favoriteFoods, InsertFavoriteFood, FavoriteFood, mealTemplates, InsertMealTemplate, MealTemplate, foodSearchCache, InsertFoodSearchCache, FoodSearchCache, progressPhotos, InsertProgressPhoto, ProgressPhoto, glucoseReadings, GlucoseReading, activitySamples, weightEntries, InsertWeightEntry, WeightEntry, workoutEntries, InsertWorkoutEntry, WorkoutEntry, bodyMeasurements, InsertBodyMeasurement, BodyMeasurement } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -2943,4 +2943,69 @@ ORDER BY [recordedAt] DESC, [id] DESC
       change: latest.hipsInches && oldest.hipsInches ? latest.hipsInches - oldest.hipsInches : undefined,
     },
   };
+}
+// ---------------------------------------------------------------------------
+// Meal ΓåÆ Glucose Correlation
+// ---------------------------------------------------------------------------
+export interface MealGlucoseCorrelation {
+  mealType: string;
+  avgCarbs: number;
+  avgGlucosePeak: number | null;
+  mealCount: number;
+}
+export async function getMealGlucoseCorrelations(
+  userId: number,
+  days: number = 14
+): Promise<MealGlucoseCorrelation[]> {
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  const POST_MEAL_START_MS = 30 * 60 * 1000;
+  const POST_MEAL_END_MS = 2 * 60 * 60 * 1000;
+  type MealRow = { mealType: string; carbsGrams: number; loggedAt: number };
+  type ReadingRow = { readingAt: number; mgdl: number };
+  let meals: MealRow[] = [];
+  let readings: ReadingRow[] = [];
+  const db = await getDb();
+  if (!db) {
+    if (!ENV.azureSqlConnectionString) return [];
+    try {
+      const pool = await getAzureSqlPool();
+      const mealResult = await pool.request().input("userId", userId).input("since", since)
+        .query<any>("SELECT [mealType], [carbsGrams], [loggedAt] FROM [dbo].[food_logs] WHERE [userId] = @userId AND [loggedAt] >= @since");
+      meals = (mealResult.recordset || []).map((r: any) => ({ mealType: r.mealType || "other", carbsGrams: Number(r.carbsGrams) || 0, loggedAt: Number(r.loggedAt) }));
+      const glucoseResult = await pool.request().input("userId", userId).input("since", since)
+        .query<any>("SELECT [readingAt], [mgdl] FROM [dbo].[glucose_readings] WHERE [userId] = @userId AND [readingAt] >= @since ORDER BY [readingAt] ASC");
+      readings = (glucoseResult.recordset || []).map((r: any) => ({ readingAt: Number(r.readingAt), mgdl: Number(r.mgdl) }));
+    } catch (error) {
+      console.error("[Database] Error getting meal glucose correlations (Azure SQL):", error);
+      return [];
+    }
+  } else {
+    const mealRows = await db.select({ mealType: foodLogs.mealType, carbsGrams: foodLogs.carbsGrams, loggedAt: foodLogs.loggedAt })
+      .from(foodLogs).where(and(eq(foodLogs.userId, userId), gte(foodLogs.loggedAt, since)));
+    meals = mealRows.map((r) => ({ mealType: r.mealType, carbsGrams: r.carbsGrams, loggedAt: r.loggedAt }));
+    const readingRows = await db.select({ readingAt: glucoseReadings.readingAt, mgdl: glucoseReadings.mgdl })
+      .from(glucoseReadings).where(and(eq(glucoseReadings.userId, userId), gte(glucoseReadings.readingAt, since))).orderBy(glucoseReadings.readingAt);
+    readings = readingRows;
+  }
+  const buckets: Record<string, { totalCarbs: number; peaks: number[]; count: number }> = {};
+  for (const meal of meals) {
+    const windowStart = meal.loggedAt + POST_MEAL_START_MS;
+    const windowEnd = meal.loggedAt + POST_MEAL_END_MS;
+    const windowReadings = readings.filter((r) => r.readingAt >= windowStart && r.readingAt <= windowEnd);
+    const peak = windowReadings.length > 0 ? Math.max(...windowReadings.map((r) => r.mgdl)) : null;
+    if (!buckets[meal.mealType]) buckets[meal.mealType] = { totalCarbs: 0, peaks: [], count: 0 };
+    buckets[meal.mealType].totalCarbs += meal.carbsGrams;
+    buckets[meal.mealType].count++;
+    if (peak !== null) buckets[meal.mealType].peaks.push(peak);
+  }
+  const ORDER = ["breakfast", "lunch", "dinner", "snack", "other"];
+  return ORDER.filter((t) => buckets[t]).map((t) => {
+    const b = buckets[t];
+    return {
+      mealType: t,
+      avgCarbs: Math.round(b.totalCarbs / b.count),
+      avgGlucosePeak: b.peaks.length > 0 ? Math.round(b.peaks.reduce((a, c) => a + c, 0) / b.peaks.length) : null,
+      mealCount: b.count,
+    };
+  });
 }
