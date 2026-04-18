@@ -16,30 +16,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
-} from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { Activity, Bot, Cable, LayoutDashboard, LineChart, LogOut, Mail, User, Apple, Dumbbell, HelpCircle, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  Cable,
+  LayoutDashboard,
+  LineChart,
+  LogOut,
+  Mail,
+  User,
+  Apple,
+  Dumbbell,
+  HelpCircle,
+  TrendingUp,
+  Menu,
+  X,
+  ChevronRight,
+} from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { toast } from "sonner";
 
-// Set MVP_ONLY to true to show only the 4 core MVP screens in the sidebar
+// Set MVP_ONLY to true to show only the 4 core MVP screens
 const MVP_ONLY = false;
 
 const allMenuItems = [
@@ -54,7 +57,7 @@ const allMenuItems = [
   { icon: HelpCircle, label: "Help", path: "/help", mvp: true },
 ];
 
-const menuItems = MVP_ONLY ? allMenuItems.filter(item => item.mvp) : allMenuItems;
+const menuItems = MVP_ONLY ? allMenuItems.filter((item) => item.mvp) : allMenuItems;
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { loading, user } = useAuth();
@@ -74,7 +77,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <Activity className="h-4 w-4" />
             Secure workspace required
           </div>
-          <h1 className="text-3xl font-black uppercase tracking-[0.1em] text-white">Enter the health intelligence workspace</h1>
+          <h1 className="text-3xl font-black uppercase tracking-[0.1em] text-white">
+            Enter the health intelligence workspace
+          </h1>
           <p className="mt-4 max-w-lg text-sm leading-7 text-slate-300">
             Sign in to access your protected dashboard, connected sources, AI health assistant, and weekly metabolic summaries.
           </p>
@@ -100,11 +105,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  return (
-    <SidebarProvider defaultOpen={true}>
-      <DashboardLayoutContent>{children}</DashboardLayoutContent>
-    </SidebarProvider>
-  );
+  return <DashboardLayoutContent>{children}</DashboardLayoutContent>;
 }
 
 function DashboardLayoutContent({ children }: { children: ReactNode }) {
@@ -114,7 +115,9 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState(user?.email ?? "");
   const [location, setLocation] = useLocation();
-  const { setOpen, isMobile } = useSidebar();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
   const normalizedCurrentEmail = (user?.email ?? "").trim().toLowerCase();
   const normalizedDraftEmail = emailDraft.trim().toLowerCase();
   const isEmailChanged = normalizedDraftEmail !== normalizedCurrentEmail;
@@ -127,12 +130,23 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
         ? "Enter a different email address"
         : null;
 
-  // Auto-collapse sidebar when location changes on desktop
+  // Close drawer when clicking outside
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.innerWidth > 768 && !isMobile) {
-      setOpen(false);
+    function handleClickOutside(e: MouseEvent) {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false);
+      }
     }
-  }, [location, isMobile, setOpen]);
+    if (isMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isMenuOpen]);
+
+  // Close drawer on route change
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location]);
 
   const handleUpdateEmail = async () => {
     const trimmedEmail = emailDraft.trim();
@@ -140,7 +154,6 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
       toast.error(emailValidationMessage);
       return;
     }
-
     try {
       await updateEmailMutation.mutateAsync({ email: trimmedEmail });
       await utils.auth.me.invalidate();
@@ -151,82 +164,150 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
     }
   };
 
+  const currentPage = menuItems.find((item) => item.path === location);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar/95 backdrop-blur">
-        <SidebarHeader className="border-b border-white/10 px-4 py-5">
-          <button className="flex w-full items-start gap-3 text-left" onClick={() => setLocation("/dashboard")}>
-            <div className="mt-1 h-3 w-3 rounded-none border border-cyan-300 bg-cyan-200/30 flex-shrink-0" />
-            <div className="group-data-[collapsible=icon]:hidden">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-cyan-200/70">HumanAIze</p>
-              <h2 className="mt-2 text-base font-black uppercase tracking-[0.12em] text-white">Personalized health AI</h2>
+
+      {/* ── Top Navbar ── */}
+      <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/10 bg-background/90 px-4 backdrop-blur md:px-6">
+
+        {/* Left: Menu button */}
+        <button
+          onClick={() => setIsMenuOpen((prev) => !prev)}
+          className="flex items-center gap-2 rounded-none border border-white/15 bg-white/[0.04] px-3 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-white/[0.09] focus:outline-none"
+          aria-label="Toggle menu"
+        >
+          <Menu className="h-4 w-4" />
+          <span>Menu</span>
+        </button>
+
+        {/* Centre: App name */}
+        <button
+          className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 text-left focus:outline-none"
+          onClick={() => setLocation("/dashboard")}
+        >
+          <div className="h-2.5 w-2.5 rounded-none border border-cyan-300 bg-cyan-200/30" />
+          <span className="text-sm font-black uppercase tracking-[0.18em] text-white">HumanAIze</span>
+        </button>
+
+        {/* Right: User avatar */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 rounded-none border border-white/15 bg-white/[0.04] p-1.5 transition hover:bg-white/[0.09] focus:outline-none" aria-label="User menu">
+              <Avatar className="h-8 w-8 rounded-none border border-white/20">
+                <AvatarFallback className="rounded-none bg-cyan-500/20 text-sm font-bold text-cyan-200">
+                  {user?.name?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase() ?? "U"}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 rounded-none border-white/10 bg-slate-950 text-white">
+            <div className="px-3 py-2 border-b border-white/10">
+              <p className="text-sm font-semibold text-white truncate">{user?.name ?? "User"}</p>
+              <p className="text-xs text-slate-400 truncate">{user?.email ?? ""}</p>
             </div>
+            <DropdownMenuItem className="cursor-pointer rounded-none mt-1" onClick={() => setLocation("/profile")}>
+              <User className="mr-2 h-4 w-4" />
+              Update profile
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer rounded-none"
+              onClick={() => {
+                setEmailDraft(user?.email ?? "");
+                setIsEmailDialogOpen(true);
+              }}
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Update email address
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-white/10" />
+            <DropdownMenuItem
+              className="cursor-pointer rounded-none text-red-300 focus:bg-red-500/10 focus:text-red-200"
+              onClick={logout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+
+      {/* ── Menu Blade Drawer (overlay) ── */}
+      {/* Backdrop */}
+      {isMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+          onClick={() => setIsMenuOpen(false)}
+        />
+      )}
+
+      {/* Drawer panel */}
+      <div
+        ref={drawerRef}
+        className={`fixed left-0 top-0 z-50 flex h-full w-72 flex-col border-r border-white/10 bg-slate-950/98 shadow-2xl transition-transform duration-300 ease-in-out ${
+          isMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Drawer header */}
+        <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2.5 w-2.5 rounded-none border border-cyan-300 bg-cyan-200/30" />
+            <span className="text-sm font-black uppercase tracking-[0.18em] text-white">HumanAIze</span>
+          </div>
+          <button
+            onClick={() => setIsMenuOpen(false)}
+            className="rounded-none border border-white/10 bg-white/[0.04] p-1.5 text-slate-400 transition hover:bg-white/[0.09] hover:text-white focus:outline-none"
+            aria-label="Close menu"
+          >
+            <X className="h-4 w-4" />
           </button>
-        </SidebarHeader>
+        </div>
 
-        <SidebarContent className="px-3 py-4">
-          <SidebarMenu>
-            {menuItems.map((item) => {
-              const isActive = location === item.path;
-              return (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton
-                    tooltip={item.label}
-                    isActive={isActive}
-                    className="h-11 rounded-none border border-transparent px-3 data-[active=true]:border-cyan-300/40 data-[active=true]:bg-cyan-300/10 data-[active=true]:text-white"
-                    onClick={() => {
-                      setLocation(item.path);
-                    }}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span className="font-medium tracking-[0.04em]">{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarContent>
-
-        <SidebarFooter className="border-t border-white/10 p-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center gap-3 border border-white/10 bg-white/[0.03] p-3 text-left transition hover:bg-white/[0.06]">
-                <Avatar className="h-10 w-10 rounded-none border border-white/15">
-                  <AvatarFallback className="rounded-none bg-primary/10 text-primary">
-                    {user?.name?.charAt(0).toUpperCase() ?? "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-white">User Profile</p>
-                  <p className="truncate text-xs text-slate-400">{user?.email ?? "Authenticated account"}</p>
-                </div>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 rounded-none border-white/10 bg-slate-950 text-white">
-              <DropdownMenuItem className="cursor-pointer rounded-none" onClick={() => setLocation("/profile")}>
-                <User className="mr-2 h-4 w-4" />
-                Update profile
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="cursor-pointer rounded-none"
+        {/* Nav items */}
+        <nav className="flex-1 overflow-y-auto py-3">
+          {menuItems.map((item) => {
+            const isActive = location === item.path;
+            return (
+              <button
+                key={item.path}
                 onClick={() => {
-                  setEmailDraft(user?.email ?? "");
-                  setIsEmailDialogOpen(true);
+                  setLocation(item.path);
+                  setIsMenuOpen(false);
                 }}
+                className={`flex w-full items-center justify-between px-4 py-3.5 text-left transition-colors ${
+                  isActive
+                    ? "border-l-2 border-cyan-400 bg-cyan-400/10 text-white"
+                    : "border-l-2 border-transparent text-slate-300 hover:bg-white/[0.05] hover:text-white"
+                }`}
               >
-                <Mail className="mr-2 h-4 w-4" />
-                Update email address
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem className="cursor-pointer rounded-none text-red-300 focus:bg-red-500/10 focus:text-red-200" onClick={logout}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarFooter>
-      </Sidebar>
+                <div className="flex items-center gap-3">
+                  <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? "text-cyan-400" : "text-slate-400"}`} />
+                  <span className="text-sm font-medium tracking-[0.04em]">{item.label}</span>
+                </div>
+                <ChevronRight className={`h-4 w-4 flex-shrink-0 ${isActive ? "text-cyan-400" : "text-slate-600"}`} />
+              </button>
+            );
+          })}
+        </nav>
 
+        {/* Drawer footer */}
+        <div className="border-t border-white/10 p-4">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-9 w-9 rounded-none border border-white/20">
+              <AvatarFallback className="rounded-none bg-cyan-500/20 text-sm font-bold text-cyan-200">
+                {user?.name?.charAt(0).toUpperCase() ?? user?.email?.charAt(0).toUpperCase() ?? "U"}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-white">{user?.name ?? "User"}</p>
+              <p className="truncate text-xs text-slate-400">{user?.email ?? ""}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Email update dialog ── */}
       <Dialog open={isEmailDialogOpen} onOpenChange={setIsEmailDialogOpen}>
         <DialogContent className="rounded-none border-white/10 bg-slate-950 text-white">
           <DialogHeader>
@@ -235,7 +316,6 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
               Change the email address associated with your account.
             </DialogDescription>
           </DialogHeader>
-
           <div className="space-y-2">
             <Input
               type="email"
@@ -248,7 +328,6 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
               <p className="text-xs text-red-300">{emailValidationMessage}</p>
             )}
           </div>
-
           <DialogFooter>
             <Button
               type="button"
@@ -270,21 +349,10 @@ function DashboardLayoutContent({ children }: { children: ReactNode }) {
         </DialogContent>
       </Dialog>
 
-      <SidebarInset className="bg-transparent">
-        <div className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/10 bg-background/85 px-4 backdrop-blur md:px-6">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="rounded-none border border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]" />
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400">Protected dashboard</p>
-              <h1 className="text-sm font-semibold uppercase tracking-[0.18em] text-white">HumanAIze Life</h1>
-            </div>
-          </div>
-          <div className="hidden border border-cyan-300/20 bg-cyan-300/5 px-3 py-2 text-[11px] font-medium uppercase tracking-[0.25em] text-cyan-100 md:block">
-            HumanAIze Life
-          </div>
-        </div>
-        <main className="min-h-[calc(100vh-4rem)] p-4 md:p-6 w-full overflow-x-auto">{children}</main>
-      </SidebarInset>
+      {/* ── Main content ── */}
+      <main className="min-h-[calc(100vh-4rem)] w-full overflow-x-auto p-4 md:p-6">
+        {children}
+      </main>
     </div>
   );
 }
