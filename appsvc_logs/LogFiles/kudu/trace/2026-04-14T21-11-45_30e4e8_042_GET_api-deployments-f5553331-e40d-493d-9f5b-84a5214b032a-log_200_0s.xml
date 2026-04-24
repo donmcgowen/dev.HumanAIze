@@ -1,0 +1,7 @@
+<step title="Incoming Request" date="2026-04-14T21:11:45.198" instance="30e4e8" url="/api/deployments/f5553331-e40d-493d-9f5b-84a5214b032a/log" method="GET" type="request" pid="832,1,30" Host="humanaize-app.scm.azurewebsites.net" User-Agent="vscode-azureappservice/0.26.5 core-rest-pipeline/1.22.2 Node/22.22.1 (Windows_NT 10.0.26200; x64)" Accept-Encoding="gzip,deflate" Accept-Language="en" Authorization="Bea..." x-ms-correlation-request-id="7ec6e402-bd97-4538-9289-6980483e35ff" x-ms-client-request-id="9d350cdc-a666-4e2b-ab43-89803c288225" X-ARR-LOG-ID="9d350cdc-a666-4e2b-ab43-89803c288225" CLIENT-IP="174.62.152.149:53472" X-SITE-DEPLOYMENT-ID="humanaize-app" WAS-DEFAULT-HOSTNAME="humanaize-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/f5553331-e40d-493d-9f5b-84a5214b032a/log" X-Client-IP="174.62.152.149" X-Client-Port="53472" >
+  <step title="Cleanup Xml Logs" date="2026-04-14T21:11:45.199" /><!-- duration: 7ms -->
+  <step title="DeploymentService.GetLogEntry" date="2026-04-14T21:11:45.216" >
+    <step title="DeploymentManager.GetLogEntries(id:f5553331-e40d-493d-9f5b-84a5214b032a)" date="2026-04-14T21:11:45.218" /><!-- duration: 20ms -->
+  </step><!-- duration: 23ms -->
+  <step title="Outgoing response" date="2026-04-14T21:11:45.245" type="response" statusCode="200" statusText="OK" /><!-- duration: 2ms -->
+</step><!-- duration: 50ms -->

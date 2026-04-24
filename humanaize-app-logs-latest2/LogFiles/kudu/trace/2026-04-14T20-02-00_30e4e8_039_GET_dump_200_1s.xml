@@ -1,0 +1,4 @@
+<step title="Incoming Request" date="2026-04-14T20:02:00.136" instance="30e4e8" url="/dump" method="GET" type="request" pid="832,1,36" Host="humanaize-app.scm.azurewebsites.net" User-Agent="AZURECLI/2.84.0 (MSI)" Accept-Encoding="identity" Authorization="Bea..." x-ms-client-request-id="c8c61219-383c-11f1-8bd6-005056c00008" X-ARR-LOG-ID="c8c61219-383c-11f1-8bd6-005056c00008" CLIENT-IP="174.62.152.149:49693" X-SITE-DEPLOYMENT-ID="humanaize-app" WAS-DEFAULT-HOSTNAME="humanaize-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/dump" X-Client-IP="174.62.152.149" X-Client-Port="49693" >
+  <step title="Cleanup Xml Logs" date="2026-04-14T20:02:00.139" /><!-- duration: 27ms -->
+  <step title="Outgoing response" date="2026-04-14T20:02:00.893" type="response" statusCode="200" statusText="OK" /><!-- duration: 18ms -->
+</step><!-- duration: 785ms -->

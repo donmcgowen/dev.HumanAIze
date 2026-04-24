@@ -1,0 +1,5 @@
+<step title="Incoming Request" date="2026-04-14T16:36:29.830" instance="30e4e8" url="/logstream" method="GET" type="request" pid="832,1,16" Host="humanaize-app.scm.azurewebsites.net" User-Agent="AZURECLI/2.84.0 (MSI)" Accept-Encoding="identity" Authorization="Bea..." x-ms-client-request-id="0e495aa7-3820-11f1-876b-005056c00008" X-ARR-LOG-ID="0e495aa7-3820-11f1-876b-005056c00008" CLIENT-IP="174.62.152.149:65332" X-SITE-DEPLOYMENT-ID="humanaize-app" WAS-DEFAULT-HOSTNAME="humanaize-app.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/logstream" X-Client-IP="174.62.152.149" X-Client-Port="65332" >
+  <step title="LogStreamHandlerMiddleware.Invoke" date="2026-04-14T16:36:29.841" /><!-- duration: 102ms -->
+  <step title="Error occurred" date="2026-04-14T17:54:30.049" type="error" text="LogStreamManager: ProcessRequest end" /><!-- duration: 1ms -->
+  <step title="Outgoing response" date="2026-04-14T17:54:30.067" type="response" statusCode="200" statusText="OK" /><!-- duration: 3ms -->
+</step><!-- duration: 4680242ms -->

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//tmp/**)",
+      "Bash(npx tsc *)",
+      "Bash(powershell -File -)",
+      "Bash(awk '/cgm: router/,/manualGlucose: router/' server/routers.ts)",
+      "Bash(awk '/cgm: router/,/manualGlucose: router/')"
+    ],
+    "additionalDirectories": [
+      "\\tmp",
+      "C:\\Users\\donmc\\AppData\\Local\\Temp"
+    ]
+  }
+}

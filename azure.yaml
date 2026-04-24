@@ -1,0 +1,20 @@
+name: humanaize-app
+services:
+  - name: web
+    project: .
+    language: node
+    build:
+      command: pnpm install && pnpm run build
+    start: npm start
+    azure:
+      target: app-service
+      resourceGroup: humanaize-rg
+      location: eastus
+      sku: B1
+      siteName: humanaize-app
+      runtime: "NODE|20-lts"
+      appSettings:
+        SCM_DO_BUILD_DURING_DEPLOYMENT: "true"
+        NPM_CONFIG_PRODUCTION: "false"
+        WEBSITE_NODE_DEFAULT_VERSION: "20.0"
+        NODE_ENV: production
